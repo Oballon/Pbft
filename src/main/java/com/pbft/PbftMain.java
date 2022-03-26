@@ -25,9 +25,6 @@ public class PbftMain {
 			nodes.add(new Pbft(i,size).start());
 		}
 
-		//这是一个新的编辑部分！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！
-
-
 		System.out.println("初始化模拟网络");
 		// 初始化模拟网络
 		for(int i=0;i<size;i++){

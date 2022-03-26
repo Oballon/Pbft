@@ -110,7 +110,5 @@ public class PbftMsg {
 	public void setOnode(int onode) {
 		this.onode = onode;
 	}
-	
-	
-	
+		
 }

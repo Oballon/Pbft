@@ -96,8 +96,7 @@ public class Pbft {
 					} catch (InterruptedException e) {
 						e.printStackTrace();
 					}
-				}
-				
+				}				
 			}
 		}).start();
 		
@@ -157,10 +156,8 @@ public class Pbft {
 				PbftMsg cv = new PbftMsg(CV, this.index);
 				cv.setVnum(this.view+1);
 				PbftMain.publish(cv);
-			}
-			
-		});
-		
+			}			
+		});		
 	}
 	
 	/**
@@ -179,8 +176,7 @@ public class Pbft {
 	public void req(String data) throws InterruptedException{
 		PbftMsg req = new PbftMsg(Pbft.REQ, this.index);
 		req.setData(data);
-		reqQueue.put(req);
-		
+		reqQueue.put(req);		
 	}
 	
 	/**
@@ -290,13 +286,15 @@ public class Pbft {
 			int no = genNo.incrementAndGet();
 			sed.setNo(no);
 			PbftMain.publish(sed);
-		}else if(msg.getNode() != index){ // 自身忽略
+		}
+		else if(msg.getNode() != index){ // 自身忽略
 			// 非主节点收到，说明可能主节点宕机
 			if(doneMsg.containsKey(msg.getDataKey())){
 				// 已经处理过，直接回复
 				sed.setType(REPLY);
 				PbftMain.send(msg.getNode(), sed);
-			}else{
+			}
+			else{
 				// 认为客户端进行了CV投票
 				votes_vnum.add(msg.getNode()+"@"+(msg.getVnum()+1));
 				vnumAggreCount.incrementAndGet(msg.getVnum()+1);
@@ -304,9 +302,7 @@ public class Pbft {
 				logger.info("转发主节点[" +index+"]:"+ msg);
 				PbftMain.send(getPriNode(view), sed);
 				timeOutsReq.put(msg.getData(), System.currentTimeMillis());
-			}
-			
-			
+			}			
 		}
 	}
 	
@@ -346,9 +342,7 @@ public class Pbft {
 				viewOk = true;
 				logger.info("视图初始化完成["+index+"]："+ view);
 			}
-		}
-		
-		
+		}		
 	}
 
 	private void onCommit(PbftMsg msg) {
@@ -377,15 +371,15 @@ public class Pbft {
 			if(msg.getOnode() == index){
 				// 自身则直接回复
 				onReply(msg);
-			}else{
+			}
+			else{
 				PbftMsg sed = new PbftMsg(msg);
 				sed.setType(REPLY);
 				sed.setNode(index);
 				// 回复客户端
 //				PbftMain.send(sed.getOnode(), sed);
 				doSomething(sed);
-			}
-			
+			}			
 		}
 	}
 
@@ -417,8 +411,7 @@ public class Pbft {
 			doneMsg.put(sed.getDataKey(), sed);
 			PbftMain.publish(sed);
 		}
-		// 后续的票数肯定凑不满，超时自动清除
-			
+		// 后续的票数肯定凑不满，超时自动清除			
 	}
 
 	private void onPrePrepare(PbftMsg msg) {

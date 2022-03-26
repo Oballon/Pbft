@@ -58,8 +58,7 @@ public class PbftMain {
 //		nodes.get(0).back();
 //		for(int i=1;i<2;i++){
 //			nodes.get(i).req("testB"+i);
-//		}
-		
+//		}		
 	}
 	
 	/**
@@ -76,12 +75,12 @@ public class PbftMain {
 			}, net[msg.getNode()*10+pbft.getIndex()]);
 		}
 	}
+	
 	/**
 	 * 发送消息到指定节点
 	 * @param toIndex
 	 * @param msg
-	 */
-	
+	 */	
 	public static void send(int toIndex,PbftMsg msg){
 		// 模拟网络时延
 		TimerManager.schedule(()->{

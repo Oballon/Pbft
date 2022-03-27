@@ -11,8 +11,7 @@ import com.pbft.TimerManager;
 public class HQMain {
 static Logger logger = LoggerFactory.getLogger(HQMain.class);
 	
-	public static final int size =22;
-	
+	public static final int size =22;	
 	
 	private static List<HQ> nodes = Lists.newArrayList();
 	
@@ -42,8 +41,7 @@ static Logger logger = LoggerFactory.getLogger(HQMain.class);
 					net[i*10+j] = 5;
 				}
 			}
-		}
-		
+		}		
 		
 		// 模拟请求端发送请求
 		for(int i=0;i<1;i++){
@@ -65,12 +63,9 @@ static Logger logger = LoggerFactory.getLogger(HQMain.class);
 //		nodes.get(0).back();
 //		for(int i=1;i<2;i++){
 //			nodes.get(i).req("testB"+i);
-//		}
-		
+//		}		
 	}
 	
-	
-
 	/**
 	 * 广播消息
 	 * @param msg
@@ -117,8 +112,7 @@ static Logger logger = LoggerFactory.getLogger(HQMain.class);
 		
 		for(int i=0;i<hqnum;i++) {
 			HQnodes.get(i).start();
-		}
-		
+		}		
 	}
 //	public static void start(int hqnum) {
 //		int num=0;
@@ -158,8 +152,7 @@ static Logger logger = LoggerFactory.getLogger(HQMain.class);
 	 * 发送消息到指定节点
 	 * @param toIndex
 	 * @param msg
-	 */
-	
+	 */	
 	public static void send(int toIndex,HQMsg msg){
 		// 模拟网络时延
 		
@@ -168,9 +161,6 @@ static Logger logger = LoggerFactory.getLogger(HQMain.class);
 			nodes.get(toIndex).push(msg);
 			return null;
 		}, net[msg.getNode()*10+toIndex]);
-	}
-	
-	
-	
+	}	
 
 }

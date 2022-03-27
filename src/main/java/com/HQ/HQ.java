@@ -43,8 +43,7 @@ public class HQ {
 	public static final int HPP = 6;  // 预准备阶段
 	public static final int HBA = 7;  // 回复阶段
 	public static final int HCON = 8; // 确认阶段
-	public static final int HCOM = 9; // 回复
-		
+	public static final int HCOM = 9; // 回复		
 	
 	
 	private volatile boolean isRun = false;
@@ -120,8 +119,7 @@ public class HQ {
 					} catch (InterruptedException e) {
 						e.printStackTrace();
 					}
-				}
-				
+				}				
 			}
 		}).start();
 		
@@ -174,10 +172,8 @@ public class HQ {
 				HQMsg cv = new HQMsg(CV, this.index);
 				cv.setVnum(this.view+1);
 				HQMain.publish(cv);
-			}
-			
-		});
-		
+			}			
+		});		
 	}
 	
 	
@@ -216,10 +212,8 @@ public class HQ {
 				PbftMsg cv = new PbftMsg(CV, this.index);
 				cv.setVnum(this.view+1);
 				PbftMain.publish(cv);
-			}
-			
-		});
-		
+			}			
+		});		
 	}
 	
 	/**
@@ -239,8 +233,7 @@ public class HQ {
 		HQMsg req = new HQMsg(HQ.HREQ, this.index);
 		req.setData(data);
 		reqQueue.put(req);
-	}
-	
+	}	
 
 	/**
 	 * 真实的发送请求
@@ -379,11 +372,8 @@ public class HQ {
 				logger.info("转发主节点[" +index+"]:"+ msg);
 				HQMain.send(getPriNode(view), sed);
 				timeOutsReq.put(msg.getData(), System.currentTimeMillis());
-			}
-			
-			
-		}
-		
+			}		
+		}	
 	}
 	
 	//第二步 Back 回复阶段，各个节点向主节点发送回复信息
@@ -400,8 +390,7 @@ public class HQ {
 		timeOuts.put(key, System.currentTimeMillis());
 		// 移除请求超时，假如有请求的话
 		timeOutsReq.remove(msg.getData());
-		// 进入准备阶段
-		
+		// 进入准备阶段		
 		if(isByzt) {
 			credit = credit/2; 
 			String message = msg.getData()+"100";
@@ -409,18 +398,13 @@ public class HQ {
 			HQMsg sed = new HQMsg(msg);
 			sed.setType(HBA);
 			sed.setNode(index);
-			HQMain.send(getPriNode(view), sed);
-			
+			HQMain.send(getPriNode(view), sed);			
 		}else {
 			HQMsg sed = new HQMsg(msg);
 			sed.setType(HBA);
 			sed.setNode(index);
-			HQMain.send(getPriNode(view), sed);
-			
-		}
-		
-		
-
+			HQMain.send(getPriNode(view), sed);			
+		}	
 	}
 	
 	
@@ -670,16 +654,8 @@ public class HQ {
 				viewOk = true;
 				logger.info("视图初始化完成["+index+"]："+ view);
 			}
-		}
-		
-		
-	}
-
-	
-	
-	
-
-	
+		}		
+	}	
 	
 	public boolean checkMsg(HQMsg msg,boolean isPre){
 		return (msg.isOk() && msg.getVnum() == view 

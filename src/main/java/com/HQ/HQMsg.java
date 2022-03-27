@@ -1,7 +1,8 @@
 package com.HQ;
 
 public class HQMsg {
-private boolean isOk; // 模拟校验是否通过
+	
+	private boolean isOk; // 模拟校验是否通过
 	
 	private int type; // 消息类型
 	private int node; // 节点

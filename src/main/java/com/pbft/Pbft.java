@@ -286,15 +286,13 @@ public class Pbft {
 			int no = genNo.incrementAndGet();
 			sed.setNo(no);
 			PbftMain.publish(sed);
-		}
-		else if(msg.getNode() != index){ // 自身忽略
+		}else if(msg.getNode() != index){ // 自身忽略
 			// 非主节点收到，说明可能主节点宕机
 			if(doneMsg.containsKey(msg.getDataKey())){
 				// 已经处理过，直接回复
 				sed.setType(REPLY);
 				PbftMain.send(msg.getNode(), sed);
-			}
-			else{
+			}else{
 				// 认为客户端进行了CV投票
 				votes_vnum.add(msg.getNode()+"@"+(msg.getVnum()+1));
 				vnumAggreCount.incrementAndGet(msg.getVnum()+1);
@@ -371,8 +369,7 @@ public class Pbft {
 			if(msg.getOnode() == index){
 				// 自身则直接回复
 				onReply(msg);
-			}
-			else{
+			}else{
 				PbftMsg sed = new PbftMsg(msg);
 				sed.setType(REPLY);
 				sed.setNode(index);

@@ -138,8 +138,390 @@ public class HQ {
 			}
 		}, 10, 100);
 		return this;
+	}	
+		
+	/**
+	 * 真实的发送请求
+	 * @return
+	 */
+	protected boolean doReq() {
+		if(!viewOk || curMsg != null)return false; // 上一个请求还没发完/视图初始化中
+		curMsg = reqQueue.poll();
+		if(curMsg == null)return false;
+		curMsg.setVnum(this.view);
+		doSendCurMsg();
+		return true;
 	}
 	
+	void doSendCurMsg(){
+		timeOutsReq.put(curMsg.getData(), System.currentTimeMillis());
+		HQMain.send(getPriNode(view), curMsg);
+	}
+	
+	protected boolean doAction(HQMsg msg) {
+		if(!isRun) return false;
+		if(msg != null){
+			logger.info("收到消息[" +index+"]:"+ msg);
+			switch (msg.getType()) {
+			case HREQ:
+				onHReq(msg);
+				break;
+			case HPP:
+				// HQrepre
+				onBack(msg);
+				break;
+			case HBA:
+				// HQpre
+				onConfirm(msg);
+				break;
+			case HCON:
+				// HQcommit
+				onHCommit(msg);
+				break;
+			case HCOM:
+				// HQreply
+				onHReply(msg);
+				break;
+				
+			case REQ:
+				onReq(msg);
+				break;			
+			case PP:
+				// prepre
+				onPrePrepare(msg);
+				break;			
+			case PA:
+				// pre
+				onPrepare(msg);
+				break;			
+			case CM:
+				// commit
+				onCommit(msg);
+				break;				
+			case REPLY:
+				onReply(msg);
+				break;
+				
+			case VIEW:
+				onGetView(msg);
+				break;			
+			case CV:
+				onChangeView(msg);
+				break;
+			default:
+				break;
+			}
+			return true;
+		}
+		return false;
+	}
+	
+	//第一步 HREQ 主节点广播信息
+	private void onHReq(HQMsg msg) {
+		if(!msg.isOk()) return;
+		HQMsg sed = new HQMsg(msg);
+		sed.setNode(index);
+		if(msg.getVnum() < view) return;
+		if(msg.getVnum() == index){
+			if(applyMsg.containsKey(msg.getDataKey())) return; // 已经受理过
+			applyMsg.put(msg.getDataKey(), msg);
+			// 主节点收到C的请求后进行广播
+			sed.setType(HPP);
+//			sed.setVnum(view);
+			// 主节点生成序列号
+			int no = genNo.incrementAndGet();
+			sed.setNo(no);
+			HQMain.HQpublish(sed);
+		}else if(msg.getNode() != index){ // 自身忽略
+			// 非主节点收到，说明可能主节点宕机
+			if(doneMsg.containsKey(msg.getDataKey())){
+				
+				// 已经处理过，直接回复
+				sed.setType(REPLY);
+				HQMain.send(msg.getNode(), sed);
+			}else{
+				// 认为客户端进行了CV投票
+				votes_vnum.add(msg.getNode()+"@"+(msg.getVnum()+1));
+				vnumAggreCount.incrementAndGet(msg.getVnum()+1);
+				// 未处理，说明可能主节点宕机，转发给主节点试试
+				logger.info("转发主节点[" +index+"]:"+ msg);
+				HQMain.send(getPriNode(view), sed);
+				timeOutsReq.put(msg.getData(), System.currentTimeMillis());
+			}		
+		}	
+	}
+	
+	//第二步 Back 回复阶段，各个节点向主节点发送回复信息
+	private void onBack(HQMsg msg) {
+		if(!checkMsg(msg,true)) return;
+		
+		String key = msg.getDataKey();
+		if(votes_pre.contains(key)){
+			// 说明已经发起过，不能重复发起
+			return;
+		}
+		votes_pre.add(key);
+		// 启动超时控制
+		timeOuts.put(key, System.currentTimeMillis());
+		// 移除请求超时，假如有请求的话
+		timeOutsReq.remove(msg.getData());
+		// 进入准备阶段		
+		if(isByzt) {
+			credit = credit/2; 
+			String message = msg.getData()+"100";
+			msg.setData(message);
+			HQMsg sed = new HQMsg(msg);
+			sed.setType(HBA);
+			sed.setNode(index);
+			HQMain.send(getPriNode(view), sed);			
+		}else {
+			HQMsg sed = new HQMsg(msg);
+			sed.setType(HBA);
+			sed.setNode(index);
+			HQMain.send(getPriNode(view), sed);			
+		}	
+	}	
+	
+	//第三步骤，主节点回复Confirm信息
+	private void onConfirm(HQMsg msg) {
+		num++;
+		if(!checkMsg(msg,false)) {
+			logger.info("异常消息[" +index+"]:"+msg);
+			return;
+		}
+		
+		String key = msg.getKey();
+		if(votes_pare.contains(key)){
+			// 说明已经投过票，不能重复投
+			return;
+		}
+		if(!votes_pre.contains(msg.getDataKey())){
+			// 必须先过预准备
+			return;
+		}
+		votes_pare.add(key);
+		
+		// 票数 +1
+		long agCou = aggre_pare.incrementAndGet(msg.getDataKey());
+		int hqnum = size - (size-1)/3;
+		if(num == hqnum) {
+			if(agCou == hqnum){
+				aggre_pare.remove(msg.getDataKey());
+				// 进入提交阶段
+				HQMsg sed = new HQMsg(msg);
+				sed.setType(HCON);
+				sed.setNode(index);
+				doneMsg.put(sed.getDataKey(), sed);
+				HQMain.HQpublish(sed);
+				
+			}else {
+				num =0;
+				System.out.println("---------------------------------------存在拜占庭节点");
+				HQMain.Bstart();
+				HQMsg sed = new HQMsg(msg);
+				sed.setType(REQ);
+				push(sed);
+			}			
+		}		
+		// 后续的票数肯定凑不满，超时自动清除			
+	}
+		
+	//第四步
+	private void onHCommit(HQMsg msg) {
+		if(!checkMsg(msg,false)) return;
+		// data模拟数据摘要
+		String key = msg.getKey();
+		
+		if(msg.getNode() != index){
+			this.genNo.set(msg.getNo());
+		}
+		// 进入回复阶段
+//		if(msg.getOnode() == index){
+//			// 自身则直接回复
+//			onReply(msg);
+//		}else{
+//			HQMsg sed = new HQMsg(msg);
+//			sed.setType(HCOM);
+//			sed.setNode(index);
+//			// 回复客户端
+////			HQMain.send(sed.getOnode(), sed);
+//			doSomething(sed);
+//		}
+		HQMsg sed = new HQMsg(msg);
+		sed.setType(HCOM);
+		sed.setNode(index);
+		// 回复客户端
+//		HQMain.send(sed.getOnode(), sed);
+		doSomething(sed);
+	}
+	
+	//第五步
+	private void onHReply(HQMsg msg) {
+		// 进入回复阶段
+//		if(msg.getOnode() == index){
+//			// 自身则直接回复
+//			onReply(msg);
+//		}else{
+//			HQMsg sed = new HQMsg(msg);
+//			sed.setType(HCOM);
+//			sed.setNode(index);
+//			// 回复客户端
+////			HQMain.send(sed.getOnode(), sed);
+//			doSomething(sed);
+//		}
+	}
+	
+	
+// PBFT source functions
+	private void onReq(HQMsg msg) {
+		if(!msg.isOk()) return;
+		HQMsg sed = new HQMsg(msg);
+		sed.setNode(index);
+		if(msg.getVnum() < view) return;
+		if(msg.getVnum() == index){
+			if(applyMsg.containsKey(msg.getDataKey())) return; // 已经受理过
+			applyMsg.put(msg.getDataKey(), msg);
+			// 主节点收到C的请求后进行广播
+			sed.setType(PP);
+//			sed.setVnum(view);
+			// 主节点生成序列号
+			int no = genNo.incrementAndGet();
+			sed.setNo(no);
+			HQMain.publish(sed);
+		}else if(msg.getNode() != index){ // 自身忽略
+			// 非主节点收到，说明可能主节点宕机
+			if(doneMsg.containsKey(msg.getDataKey())){
+				// 已经处理过，直接回复
+				sed.setType(REPLY);
+				HQMain.send(msg.getNode(), sed);
+			}else{
+				// 认为客户端进行了CV投票
+				votes_vnum.add(msg.getNode()+"@"+(msg.getVnum()+1));
+				vnumAggreCount.incrementAndGet(msg.getVnum()+1);
+				// 未处理，说明可能主节点宕机，转发给主节点试试
+				logger.info("转发主节点[" +index+"]:"+ msg);
+				HQMain.send(getPriNode(view), sed);
+				timeOutsReq.put(msg.getData(), System.currentTimeMillis());
+			}			
+		}
+	}	
+
+	private void onPrePrepare(HQMsg msg) {
+		if(!checkMsg(msg,true)) return;
+		
+		String key = msg.getDataKey();
+		if(votes_pre.contains(key)){
+			// 说明已经发起过，不能重复发起
+			return;
+		}
+		votes_pre.add(key);
+		// 启动超时控制
+		timeOuts.put(key, System.currentTimeMillis());
+		// 移除请求超时，假如有请求的话
+		timeOutsReq.remove(msg.getData());
+		// 进入准备阶段
+		HQMsg sed = new HQMsg(msg);
+		sed.setType(PA);
+		sed.setNode(index);
+		HQMain.publish(sed);
+	}
+	
+	private void onPrepare(HQMsg msg) {
+		if(!checkMsg(msg,false)) {
+			logger.info("异常消息[" +index+"]:"+msg);
+			return;
+		}
+		
+		String key = msg.getKey();
+		if(votes_pare.contains(key)){
+			// 说明已经投过票，不能重复投
+			return;
+		}
+		if(!votes_pre.contains(msg.getDataKey())){
+			// 必须先过预准备
+			return;
+		}
+		votes_pare.add(key);
+		
+		// 票数 +1
+		long agCou = aggre_pare.incrementAndGet(msg.getDataKey());
+		if(agCou >= 2*maxf+1){
+			aggre_pare.remove(msg.getDataKey());
+			// 进入提交阶段
+			HQMsg sed = new HQMsg(msg);
+			sed.setType(CM);
+			sed.setNode(index);
+			doneMsg.put(sed.getDataKey(), sed);
+			HQMain.publish(sed);
+		}
+		// 后续的票数肯定凑不满，超时自动清除			
+	}
+	
+	private void onCommit(HQMsg msg) {
+		if(!checkMsg(msg,false)) return;
+		// data模拟数据摘要
+		String key = msg.getKey();
+		if(votes_comm.contains(key)){
+			// 说明该节点对该项数据已经投过票，不能重复投
+			return;
+		}
+		if(!votes_pare.contains(key)){
+			// 必须先过准备
+            //logger.info("---------------------必须先过准备----:"+key);
+			return;
+		}
+		
+		votes_comm.add(key);
+		// 票数 +1
+		long agCou = aggre_comm.incrementAndGet(msg.getDataKey());
+		if(agCou >= 2*maxf+1){
+			if(credit<100) {
+				credit = credit +10;
+				if(credit>100) credit =100;
+			}
+			
+			remove(msg.getDataKey());
+			if(msg.getNode() != index){
+				this.genNo.set(msg.getNo());
+			}
+			// 进入回复阶段
+			if(msg.getOnode() == index){
+				// 自身则直接回复
+				onReply(msg);
+			}else{
+				HQMsg sed = new HQMsg(msg);
+				sed.setType(REPLY);
+				sed.setNode(index);
+				// 回复客户端
+//				PbftMain.send(sed.getOnode(), sed);
+				doSomething(sed);
+			}			
+		}
+	}		
+
+	private void onReply(HQMsg msg) {
+		if(curMsg == null || !curMsg.getData().equals(msg.getData()))return;
+//		long count = replyCount.incrementAndGet();
+//		if(count >= maxf+1){
+//			logger.info("消息确认成功[" +index+"]:"+ msg);
+			replyCount.set(0);
+			curMsg = null; // 当前请求已经完成
+			// 执行相关逻辑			
+			doSomething(msg);
+//		}
+	}
+
+	private void doSomething(HQMsg msg) {
+		// 请求被允许，可放心执行
+		logger.info("请求执行成功[" +index+"]:"+msg);
+	}	
+	
+	public boolean checkMsg(HQMsg msg,boolean isPre){
+		return (msg.isOk() && msg.getVnum() == view 
+				// pre阶段校验
+				&& (!isPre || msg.getNode() == index || (getPriNode(view) == msg.getNode() && msg.getNo() > genNo.get())));
+	}	
+
 	/**
 	 * 检测超时情况
 	 */
@@ -216,109 +598,18 @@ public class HQ {
 		});		
 	}
 	
-	/**
-	 * 初始化视图view
-	 */
-	public void pubView(){
-		HQMsg sed = new HQMsg(VIEW,index);
-		HQMain.publish(sed);
+	public int getPriNode(int view2){
+		return view2%size;
 	}
 	
-	/**
-	 * 请求入列
-	 * @param data
-	 * @throws InterruptedException 
-	 */
-	public void req(String data) throws InterruptedException{
-		HQMsg req = new HQMsg(HQ.HREQ, this.index);
-		req.setData(data);
-		reqQueue.put(req);
-	}	
-
-	/**
-	 * 真实的发送请求
-	 * @return
-	 */
-	protected boolean doReq() {
-		if(!viewOk || curMsg != null)return false; // 上一个请求还没发完/视图初始化中
-		curMsg = reqQueue.poll();
-		if(curMsg == null)return false;
-		curMsg.setVnum(this.view);
-		doSendCurMsg();
-		return true;
-	}
-	
-	void doSendCurMsg(){
-		timeOutsReq.put(curMsg.getData(), System.currentTimeMillis());
-		HQMain.send(getPriNode(view), curMsg);
-	}
-
-	// 清理请求相关状态
-	private void remove(String it) {
-		votes_pre.remove(it);
-		votes_pare.removeIf((vp)->{
-			return StringUtils.startsWith(vp, it);
-		});
-		votes_comm.removeIf((vp)->{
-			return StringUtils.startsWith(vp, it);
-		});
-		aggre_pare.remove(it);
-		aggre_comm.remove(it);
-		timeOuts.remove(it);
-	}
-	
-	protected boolean doAction(HQMsg msg) {
-		if(!isRun) return false;
-		if(msg != null){
-			logger.info("收到消息[" +index+"]:"+ msg);
-			switch (msg.getType()) {
-			case PP:
-				// prepre
-				onPrePrepare(msg);
-				break;
-			case PA:
-				// prepare
-				onPrepare(msg);
-				break;
-			case CM:
-				// commit
-				onCommit(msg);
-				break;
-			case REQ:
-				onReq(msg);
-				break;
-			case HPP:
-				// prepre
-				onBack(msg);
-				break;
-			case HBA:
-				// prepare
-				onConfirm(msg);
-				break;
-			case HCON:
-				// commit
-				onHCommit(msg);
-				break;
-			case REPLY:
-				onReply(msg);
-				break;
-			case VIEW:
-				onGetView(msg);
-				break;
-			case HREQ:
-				onHReq(msg);
-				break;
-			case CV:
-				onChangeView(msg);
-				break;
-			default:
-				break;
-			}
-			return true;
+	public void push(HQMsg msg){
+		try {
+			this.qbm.put(msg);
+		} catch (InterruptedException e) {
+			e.printStackTrace();
 		}
-		return false;
 	}
-
+		
 	private void onChangeView(HQMsg msg) {
 		// 收集视图变更
 		String vkey = msg.getNode()+"@"+msg.getVnum();
@@ -341,300 +632,6 @@ public class HQ {
 		}
 	}
 	
-	//第一步 HREQ 主节点广播信息
-	private void onHReq(HQMsg msg) {
-		if(!msg.isOk()) return;
-		HQMsg sed = new HQMsg(msg);
-		sed.setNode(index);
-		if(msg.getVnum() < view) return;
-		if(msg.getVnum() == index){
-			if(applyMsg.containsKey(msg.getDataKey())) return; // 已经受理过
-			applyMsg.put(msg.getDataKey(), msg);
-			// 主节点收到C的请求后进行广播
-			sed.setType(HPP);
-//			sed.setVnum(view);
-			// 主节点生成序列号
-			int no = genNo.incrementAndGet();
-			sed.setNo(no);
-			HQMain.HQpublish(sed);
-		}else if(msg.getNode() != index){ // 自身忽略
-			// 非主节点收到，说明可能主节点宕机
-			if(doneMsg.containsKey(msg.getDataKey())){
-				
-				// 已经处理过，直接回复
-				sed.setType(REPLY);
-				HQMain.send(msg.getNode(), sed);
-			}else{
-				// 认为客户端进行了CV投票
-				votes_vnum.add(msg.getNode()+"@"+(msg.getVnum()+1));
-				vnumAggreCount.incrementAndGet(msg.getVnum()+1);
-				// 未处理，说明可能主节点宕机，转发给主节点试试
-				logger.info("转发主节点[" +index+"]:"+ msg);
-				HQMain.send(getPriNode(view), sed);
-				timeOutsReq.put(msg.getData(), System.currentTimeMillis());
-			}		
-		}	
-	}
-	
-	//第二步 Back 回复阶段，各个节点向主节点发送回复信息
-	private void onBack(HQMsg msg) {
-		if(!checkMsg(msg,true)) return;
-		
-		String key = msg.getDataKey();
-		if(votes_pre.contains(key)){
-			// 说明已经发起过，不能重复发起
-			return;
-		}
-		votes_pre.add(key);
-		// 启动超时控制
-		timeOuts.put(key, System.currentTimeMillis());
-		// 移除请求超时，假如有请求的话
-		timeOutsReq.remove(msg.getData());
-		// 进入准备阶段		
-		if(isByzt) {
-			credit = credit/2; 
-			String message = msg.getData()+"100";
-			msg.setData(message);
-			HQMsg sed = new HQMsg(msg);
-			sed.setType(HBA);
-			sed.setNode(index);
-			HQMain.send(getPriNode(view), sed);			
-		}else {
-			HQMsg sed = new HQMsg(msg);
-			sed.setType(HBA);
-			sed.setNode(index);
-			HQMain.send(getPriNode(view), sed);			
-		}	
-	}
-	
-	
-	//第三步骤，主节点回复Confirm信息
-	private void onConfirm(HQMsg msg) {
-		num++;
-		if(!checkMsg(msg,false)) {
-			logger.info("异常消息[" +index+"]:"+msg);
-			return;
-		}
-		
-		String key = msg.getKey();
-		if(votes_pare.contains(key)){
-			// 说明已经投过票，不能重复投
-			return;
-		}
-		if(!votes_pre.contains(msg.getDataKey())){
-			// 必须先过预准备
-			return;
-		}
-		votes_pare.add(key);
-		
-		// 票数 +1
-		long agCou = aggre_pare.incrementAndGet(msg.getDataKey());
-		int hqnum = size - (size-1)/3;
-		if(num == hqnum) {
-			if(agCou == hqnum){
-				aggre_pare.remove(msg.getDataKey());
-				// 进入提交阶段
-				HQMsg sed = new HQMsg(msg);
-				sed.setType(HCON);
-				sed.setNode(index);
-				doneMsg.put(sed.getDataKey(), sed);
-				HQMain.HQpublish(sed);
-				
-			}else {
-				num =0;
-				System.out.println("---------------------------------------存在拜占庭节点");
-				HQMain.Bstart();
-				HQMsg sed = new HQMsg(msg);
-				sed.setType(REQ);
-				push(sed);
-			}
-			
-		}
-		
-		// 后续的票数肯定凑不满，超时自动清除
-			
-	}
-	
-	
-	//第四步
-	private void onHCommit(HQMsg msg) {
-		if(!checkMsg(msg,false)) return;
-		// data模拟数据摘要
-		String key = msg.getKey();
-		
-		if(msg.getNode() != index){
-			this.genNo.set(msg.getNo());
-		}
-		// 进入回复阶段
-//		if(msg.getOnode() == index){
-//			// 自身则直接回复
-//			onReply(msg);
-//		}else{
-//			HQMsg sed = new HQMsg(msg);
-//			sed.setType(HCOM);
-//			sed.setNode(index);
-//			// 回复客户端
-////			HQMain.send(sed.getOnode(), sed);
-//			doSomething(sed);
-//		}
-		HQMsg sed = new HQMsg(msg);
-		sed.setType(HCOM);
-		sed.setNode(index);
-		// 回复客户端
-//		HQMain.send(sed.getOnode(), sed);
-		doSomething(sed);
-	}
-	
-	
-	private void onPrePrepare(HQMsg msg) {
-		if(!checkMsg(msg,true)) return;
-		
-		String key = msg.getDataKey();
-		if(votes_pre.contains(key)){
-			// 说明已经发起过，不能重复发起
-			return;
-		}
-		votes_pre.add(key);
-		// 启动超时控制
-		timeOuts.put(key, System.currentTimeMillis());
-		// 移除请求超时，假如有请求的话
-		timeOutsReq.remove(msg.getData());
-		// 进入准备阶段
-		HQMsg sed = new HQMsg(msg);
-		sed.setType(PA);
-		sed.setNode(index);
-		HQMain.publish(sed);
-	}
-	
-	private void onPrepare(HQMsg msg) {
-		if(!checkMsg(msg,false)) {
-			logger.info("异常消息[" +index+"]:"+msg);
-			return;
-		}
-		
-		String key = msg.getKey();
-		if(votes_pare.contains(key)){
-			// 说明已经投过票，不能重复投
-			return;
-		}
-		if(!votes_pre.contains(msg.getDataKey())){
-			// 必须先过预准备
-			return;
-		}
-		votes_pare.add(key);
-		
-		// 票数 +1
-		long agCou = aggre_pare.incrementAndGet(msg.getDataKey());
-		if(agCou >= 2*maxf+1){
-			aggre_pare.remove(msg.getDataKey());
-			// 进入提交阶段
-			HQMsg sed = new HQMsg(msg);
-			sed.setType(CM);
-			sed.setNode(index);
-			doneMsg.put(sed.getDataKey(), sed);
-			HQMain.publish(sed);
-		}
-		// 后续的票数肯定凑不满，超时自动清除
-			
-	}
-	
-	private void onReq(HQMsg msg) {
-		if(!msg.isOk()) return;
-		HQMsg sed = new HQMsg(msg);
-		sed.setNode(index);
-		if(msg.getVnum() < view) return;
-		if(msg.getVnum() == index){
-			if(applyMsg.containsKey(msg.getDataKey())) return; // 已经受理过
-			applyMsg.put(msg.getDataKey(), msg);
-			// 主节点收到C的请求后进行广播
-			sed.setType(PP);
-//			sed.setVnum(view);
-			// 主节点生成序列号
-			int no = genNo.incrementAndGet();
-			sed.setNo(no);
-			HQMain.publish(sed);
-		}else if(msg.getNode() != index){ // 自身忽略
-			// 非主节点收到，说明可能主节点宕机
-			if(doneMsg.containsKey(msg.getDataKey())){
-				// 已经处理过，直接回复
-				sed.setType(REPLY);
-				HQMain.send(msg.getNode(), sed);
-			}else{
-				// 认为客户端进行了CV投票
-				votes_vnum.add(msg.getNode()+"@"+(msg.getVnum()+1));
-				vnumAggreCount.incrementAndGet(msg.getVnum()+1);
-				// 未处理，说明可能主节点宕机，转发给主节点试试
-				logger.info("转发主节点[" +index+"]:"+ msg);
-				HQMain.send(getPriNode(view), sed);
-				timeOutsReq.put(msg.getData(), System.currentTimeMillis());
-			}
-			
-			
-		}
-	}
-	
-	private void onCommit(HQMsg msg) {
-		if(!checkMsg(msg,false)) return;
-		// data模拟数据摘要
-		String key = msg.getKey();
-		if(votes_comm.contains(key)){
-			// 说明该节点对该项数据已经投过票，不能重复投
-			return;
-		}
-		if(!votes_pare.contains(key)){
-			// 必须先过准备
-//			logger.info("---------------------必须先过准备----:"+key);
-			return;
-		}
-		
-		votes_comm.add(key);
-		// 票数 +1
-		long agCou = aggre_comm.incrementAndGet(msg.getDataKey());
-		if(agCou >= 2*maxf+1){
-			if(credit<100) {
-				credit = credit +10;
-				if(credit>100) credit =100;
-			}
-			
-			remove(msg.getDataKey());
-			if(msg.getNode() != index){
-				this.genNo.set(msg.getNo());
-			}
-			// 进入回复阶段
-			if(msg.getOnode() == index){
-				// 自身则直接回复
-				onReply(msg);
-			}else{
-				HQMsg sed = new HQMsg(msg);
-				sed.setType(REPLY);
-				sed.setNode(index);
-				// 回复客户端
-//				PbftMain.send(sed.getOnode(), sed);
-				doSomething(sed);
-			}
-			
-		}
-	}
-		
-
-	private void onReply(HQMsg msg) {
-		if(curMsg == null || !curMsg.getData().equals(msg.getData()))return;
-//		long count = replyCount.incrementAndGet();
-//		if(count >= maxf+1){
-//			logger.info("消息确认成功[" +index+"]:"+ msg);
-			replyCount.set(0);
-			curMsg = null; // 当前请求已经完成
-			// 执行相关逻辑
-			
-			doSomething(msg);
-//		}
-	}
-
-	private void doSomething(HQMsg msg) {
-		// 请求被允许，可放心执行
-		logger.info("请求执行成功[" +index+"]:"+msg);
-	}
-
 	private void onGetView(HQMsg msg) {
 		if(msg.getData() == null){
 			// 请求
@@ -655,24 +652,14 @@ public class HQ {
 				logger.info("视图初始化完成["+index+"]："+ view);
 			}
 		}		
-	}	
-	
-	public boolean checkMsg(HQMsg msg,boolean isPre){
-		return (msg.isOk() && msg.getVnum() == view 
-				// pre阶段校验
-				&& (!isPre || msg.getNode() == index || (getPriNode(view) == msg.getNode() && msg.getNo() > genNo.get())));
 	}
 	
-	public int getPriNode(int view2){
-		return view2%size;
-	}
-	
-	public void push(HQMsg msg){
-		try {
-			this.qbm.put(msg);
-		} catch (InterruptedException e) {
-			e.printStackTrace();
-		}
+	/**
+	 * 初始化视图view
+	 */
+	public void pubView(){
+		HQMsg sed = new HQMsg(VIEW,index);
+		HQMain.publish(sed);
 	}
 
 	public int getView() {
@@ -681,7 +668,32 @@ public class HQ {
 
 	public void setView(int view) {
 		this.view = view;
+	}	
+
+	// 清理请求相关状态
+	private void remove(String it) {
+		votes_pre.remove(it);
+		votes_pare.removeIf((vp)->{
+			return StringUtils.startsWith(vp, it);
+		});
+		votes_comm.removeIf((vp)->{
+			return StringUtils.startsWith(vp, it);
+		});
+		aggre_pare.remove(it);
+		aggre_comm.remove(it);
+		timeOuts.remove(it);
 	}
+	
+	/**
+	 * 请求入列
+	 * @param data
+	 * @throws InterruptedException 
+	 */
+	public void req(String data) throws InterruptedException{
+		HQMsg req = new HQMsg(HQ.HREQ, this.index);
+		req.setData(data);
+		reqQueue.put(req);
+	}	
 	
 	public void close(){
 		logger.info("宕机[" +index+"]--------------");
@@ -713,8 +725,5 @@ public class HQ {
 	public void setHQ(boolean isHQ) {
 		this.isHQ = isHQ;
 	}
-	
-	
-
 
 }

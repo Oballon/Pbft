@@ -119,6 +119,252 @@ public class Pbft {
 	}
 	
 	/**
+	 * 真实的发送请求
+	 * @return
+	 */
+	protected boolean doReq() {
+		if(!viewOk || curMsg != null)return false; // 上一个请求还没发完/视图初始化中
+		curMsg = reqQueue.poll();
+		if(curMsg == null)return false;
+		curMsg.setVnum(this.view);
+		doSendCurMsg();
+		return true;
+	}	
+	
+	void doSendCurMsg(){
+		timeOutsReq.put(curMsg.getData(), System.currentTimeMillis());
+		PbftMain.send(getPriNode(view), curMsg);
+	}
+	
+	private void doSomething(PbftMsg msg) {
+		// 请求被允许，可放心执行
+		logger.info("请求执行成功[" +index+"]:"+msg);
+	}
+	
+	protected boolean doAction(PbftMsg msg) {
+		logger.info("doaction");
+		if(!isRun) return false;
+		if(msg != null){
+			logger.info("收到消息[" +index+"]:"+ msg);
+			switch (msg.getType()) {
+			case REQ:
+				onReq(msg);
+				break;
+			case PP:
+				// prepre
+				onPrePrepare(msg);
+				break;
+			case PA:
+				// prepare
+				onPrepare(msg);
+				break;
+			case CM:
+				// commit
+				onCommit(msg);
+				break;
+			case REPLY:
+				onReply(msg);
+				break;
+			case VIEW:
+				onGetView(msg);
+				break;
+			case CV:
+				onChangeView(msg);
+				break;
+			default:
+				break;
+			}
+			return true;
+		}
+		return false;
+	}
+
+	private void onReq(PbftMsg msg) {
+		if(!msg.isOk()) return;
+		PbftMsg sed = new PbftMsg(msg);
+		sed.setNode(index);
+		if(msg.getVnum() < view) return;
+		if(msg.getVnum() == index){
+			if(applyMsg.containsKey(msg.getDataKey())) return; // 已经受理过
+			applyMsg.put(msg.getDataKey(), msg);
+			// 主节点收到C的请求后进行广播
+			sed.setType(PP);
+//			sed.setVnum(view);
+			// 主节点生成序列号
+			int no = genNo.incrementAndGet();
+			sed.setNo(no);
+			PbftMain.publish(sed);
+		}else if(msg.getNode() != index){ // 自身忽略
+			// 非主节点收到，说明可能主节点宕机
+			if(doneMsg.containsKey(msg.getDataKey())){
+				// 已经处理过，直接回复
+				sed.setType(REPLY);
+				PbftMain.send(msg.getNode(), sed);
+			}else{
+				// 认为客户端进行了CV投票
+				votes_vnum.add(msg.getNode()+"@"+(msg.getVnum()+1));
+				vnumAggreCount.incrementAndGet(msg.getVnum()+1);
+				// 未处理，说明可能主节点宕机，转发给主节点试试
+				logger.info("转发主节点[" +index+"]:"+ msg);
+				PbftMain.send(getPriNode(view), sed);
+				timeOutsReq.put(msg.getData(), System.currentTimeMillis());
+			}			
+		}
+	}	
+
+	private void onPrePrepare(PbftMsg msg) {
+		if(!checkMsg(msg,true)) return;
+		
+		String key = msg.getDataKey();
+		if(votes_pre.contains(key)){
+			// 说明已经发起过，不能重复发起
+			return;
+		}
+		votes_pre.add(key);
+		// 启动超时控制
+		timeOuts.put(key, System.currentTimeMillis());
+		// 移除请求超时，假如有请求的话
+		timeOutsReq.remove(msg.getData());
+		// 进入准备阶段
+		PbftMsg sed = new PbftMsg(msg);
+		sed.setType(PA);
+		sed.setNode(index);
+		PbftMain.publish(sed);
+	}
+	
+
+	private void onPrepare(PbftMsg msg) {
+		if(!checkMsg(msg,false)) {
+			logger.info("异常消息[" +index+"]:"+msg);
+			return;
+		}
+		
+		String key = msg.getKey();
+		if(votes_pare.contains(key)){
+			// 说明已经投过票，不能重复投
+			return;
+		}
+		if(!votes_pre.contains(msg.getDataKey())){
+			// 必须先过预准备
+			return;
+		}
+		votes_pare.add(key);
+		
+		// 票数 +1
+		long agCou = aggre_pare.incrementAndGet(msg.getDataKey());
+		if(agCou >= 2*maxf+1){
+			aggre_pare.remove(msg.getDataKey());
+			// 进入提交阶段
+			PbftMsg sed = new PbftMsg(msg);
+			sed.setType(CM);
+			sed.setNode(index);
+			doneMsg.put(sed.getDataKey(), sed);
+			PbftMain.publish(sed);
+		}
+		// 后续的票数肯定凑不满，超时自动清除			
+	}
+
+	private void onCommit(PbftMsg msg) {
+		if(!checkMsg(msg,false)) return;
+		// data模拟数据摘要
+		String key = msg.getKey();
+		if(votes_comm.contains(key)){
+			// 说明该节点对该项数据已经投过票，不能重复投
+			return;
+		}
+		if(!votes_pare.contains(key)){
+			// 必须先过准备
+//			logger.info("---------------------必须先过准备----:"+key);
+			return;
+		}
+		
+		votes_comm.add(key);
+		// 票数 +1
+		long agCou = aggre_comm.incrementAndGet(msg.getDataKey());
+		if(agCou >= 2*maxf+1){
+			remove(msg.getDataKey());
+			if(msg.getNode() != index){
+				this.genNo.set(msg.getNo());
+			}
+			// 进入回复阶段
+			if(msg.getOnode() == index){
+				// 自身则直接回复
+				onReply(msg);
+			}else{
+				PbftMsg sed = new PbftMsg(msg);
+				sed.setType(REPLY);
+				sed.setNode(index);
+				// 回复客户端
+//				PbftMain.send(sed.getOnode(), sed);
+				doSomething(sed);
+			}			
+		}
+	}
+	
+	private void onReply(PbftMsg msg) {
+		if(curMsg == null || !curMsg.getData().equals(msg.getData()))return;
+		long count = replyCount.incrementAndGet();
+//		if(count >= maxf+1){
+//			logger.info("消息确认成功[" +index+"]:"+ msg);
+			replyCount.set(0);
+			curMsg = null; // 当前请求已经完成
+			// 执行相关逻辑
+			doSomething(msg);
+//		}
+	}
+
+	private void onGetView(PbftMsg msg) {
+		if(msg.getData() == null){
+			// 请求
+			PbftMsg sed = new PbftMsg(msg);
+			sed.setNode(index);
+			sed.setVnum(view);
+			sed.setData("initview");
+			
+			PbftMain.send(msg.getNode(), sed);
+		}else{
+			// 响应
+			if(this.viewOk)return;
+			long count = vnumAggreCount.incrementAndGet(msg.getVnum());
+			if(count >= 2*maxf+1){
+				vnumAggreCount.clear();
+				this.view = msg.getVnum();
+				viewOk = true;
+				logger.info("视图初始化完成["+index+"]："+ view);
+			}
+		}		
+	}
+	
+	private void onChangeView(PbftMsg msg) {
+		// 收集视图变更
+		String vkey = msg.getNode()+"@"+msg.getVnum();
+		if(votes_vnum.contains(vkey)){
+			return;
+		}
+		votes_vnum.add(vkey);
+		long count = vnumAggreCount.incrementAndGet(msg.getVnum());
+		if(count >= 2*maxf+1){
+			vnumAggreCount.clear();
+			this.view = msg.getVnum();
+			viewOk = true;
+			logger.info("视图变更完成["+index+"]："+ view);
+			// 可以继续发请求
+			if(curMsg != null){
+				curMsg.setVnum(this.view);
+				logger.info("请求重传["+index+"]："+ curMsg);
+				doSendCurMsg();
+			}
+		}
+	}
+	
+	public boolean checkMsg(PbftMsg msg,boolean isPre){
+		return (msg.isOk() && msg.getVnum() == view 
+				// pre阶段校验
+				&& (!isPre || msg.getNode() == index || (getPriNode(view) == msg.getNode() && msg.getNo() > genNo.get())));
+	}
+	
+	
+	/**
 	 * 检测超时情况
 	 */
 	private void checkTimer() {
@@ -160,12 +406,16 @@ public class Pbft {
 		});		
 	}
 	
-	/**
-	 * 初始化视图view
-	 */
-	public void pubView(){
-		PbftMsg sed = new PbftMsg(VIEW,index);
-		PbftMain.publish(sed);
+	public int getPriNode(int view2){
+		return view2%size;
+	}
+	
+	public void push(PbftMsg msg){
+		try {
+			this.qbm.put(msg);
+		} catch (InterruptedException e) {
+			e.printStackTrace();
+		}
 	}
 	
 	/**
@@ -177,24 +427,6 @@ public class Pbft {
 		PbftMsg req = new PbftMsg(Pbft.REQ, this.index);
 		req.setData(data);
 		reqQueue.put(req);		
-	}
-	
-	/**
-	 * 真实的发送请求
-	 * @return
-	 */
-	protected boolean doReq() {
-		if(!viewOk || curMsg != null)return false; // 上一个请求还没发完/视图初始化中
-		curMsg = reqQueue.poll();
-		if(curMsg == null)return false;
-		curMsg.setVnum(this.view);
-		doSendCurMsg();
-		return true;
-	}
-	
-	void doSendCurMsg(){
-		timeOutsReq.put(curMsg.getData(), System.currentTimeMillis());
-		PbftMain.send(getPriNode(view), curMsg);
 	}
 
 	// 清理请求相关状态
@@ -209,244 +441,14 @@ public class Pbft {
 		aggre_pare.remove(it);
 		aggre_comm.remove(it);
 		timeOuts.remove(it);
-	}
+	}	
 	
-	protected boolean doAction(PbftMsg msg) {
-		logger.info("doaction");
-		if(!isRun) return false;
-		if(msg != null){
-			logger.info("收到消息[" +index+"]:"+ msg);
-			switch (msg.getType()) {
-			case PP:
-				// prepre
-				onPrePrepare(msg);
-				break;
-			case PA:
-				// prepare
-				onPrepare(msg);
-				break;
-			case CM:
-				// commit
-				onCommit(msg);
-				break;
-			case REPLY:
-				onReply(msg);
-				break;
-			case VIEW:
-				onGetView(msg);
-				break;
-			case REQ:
-				onReq(msg);
-				break;
-			case CV:
-				onChangeView(msg);
-				break;
-			default:
-				break;
-			}
-			return true;
-		}
-		return false;
-	}
-
-	private void onChangeView(PbftMsg msg) {
-		// 收集视图变更
-		String vkey = msg.getNode()+"@"+msg.getVnum();
-		if(votes_vnum.contains(vkey)){
-			return;
-		}
-		votes_vnum.add(vkey);
-		long count = vnumAggreCount.incrementAndGet(msg.getVnum());
-		if(count >= 2*maxf+1){
-			vnumAggreCount.clear();
-			this.view = msg.getVnum();
-			viewOk = true;
-			logger.info("视图变更完成["+index+"]："+ view);
-			// 可以继续发请求
-			if(curMsg != null){
-				curMsg.setVnum(this.view);
-				logger.info("请求重传["+index+"]："+ curMsg);
-				doSendCurMsg();
-			}
-		}
-	}
-
-	private void onReq(PbftMsg msg) {
-		if(!msg.isOk()) return;
-		PbftMsg sed = new PbftMsg(msg);
-		sed.setNode(index);
-		if(msg.getVnum() < view) return;
-		if(msg.getVnum() == index){
-			if(applyMsg.containsKey(msg.getDataKey())) return; // 已经受理过
-			applyMsg.put(msg.getDataKey(), msg);
-			// 主节点收到C的请求后进行广播
-			sed.setType(PP);
-//			sed.setVnum(view);
-			// 主节点生成序列号
-			int no = genNo.incrementAndGet();
-			sed.setNo(no);
-			PbftMain.publish(sed);
-		}else if(msg.getNode() != index){ // 自身忽略
-			// 非主节点收到，说明可能主节点宕机
-			if(doneMsg.containsKey(msg.getDataKey())){
-				// 已经处理过，直接回复
-				sed.setType(REPLY);
-				PbftMain.send(msg.getNode(), sed);
-			}else{
-				// 认为客户端进行了CV投票
-				votes_vnum.add(msg.getNode()+"@"+(msg.getVnum()+1));
-				vnumAggreCount.incrementAndGet(msg.getVnum()+1);
-				// 未处理，说明可能主节点宕机，转发给主节点试试
-				logger.info("转发主节点[" +index+"]:"+ msg);
-				PbftMain.send(getPriNode(view), sed);
-				timeOutsReq.put(msg.getData(), System.currentTimeMillis());
-			}			
-		}
-	}
-	
-	private void onReply(PbftMsg msg) {
-		if(curMsg == null || !curMsg.getData().equals(msg.getData()))return;
-		long count = replyCount.incrementAndGet();
-//		if(count >= maxf+1){
-//			logger.info("消息确认成功[" +index+"]:"+ msg);
-			replyCount.set(0);
-			curMsg = null; // 当前请求已经完成
-			// 执行相关逻辑
-			doSomething(msg);
-//		}
-	}
-
-	private void doSomething(PbftMsg msg) {
-		// 请求被允许，可放心执行
-		logger.info("请求执行成功[" +index+"]:"+msg);
-	}
-
-	private void onGetView(PbftMsg msg) {
-		if(msg.getData() == null){
-			// 请求
-			PbftMsg sed = new PbftMsg(msg);
-			sed.setNode(index);
-			sed.setVnum(view);
-			sed.setData("initview");
-			
-			PbftMain.send(msg.getNode(), sed);
-		}else{
-			// 响应
-			if(this.viewOk)return;
-			long count = vnumAggreCount.incrementAndGet(msg.getVnum());
-			if(count >= 2*maxf+1){
-				vnumAggreCount.clear();
-				this.view = msg.getVnum();
-				viewOk = true;
-				logger.info("视图初始化完成["+index+"]："+ view);
-			}
-		}		
-	}
-
-	private void onCommit(PbftMsg msg) {
-		if(!checkMsg(msg,false)) return;
-		// data模拟数据摘要
-		String key = msg.getKey();
-		if(votes_comm.contains(key)){
-			// 说明该节点对该项数据已经投过票，不能重复投
-			return;
-		}
-		if(!votes_pare.contains(key)){
-			// 必须先过准备
-//			logger.info("---------------------必须先过准备----:"+key);
-			return;
-		}
-		
-		votes_comm.add(key);
-		// 票数 +1
-		long agCou = aggre_comm.incrementAndGet(msg.getDataKey());
-		if(agCou >= 2*maxf+1){
-			remove(msg.getDataKey());
-			if(msg.getNode() != index){
-				this.genNo.set(msg.getNo());
-			}
-			// 进入回复阶段
-			if(msg.getOnode() == index){
-				// 自身则直接回复
-				onReply(msg);
-			}else{
-				PbftMsg sed = new PbftMsg(msg);
-				sed.setType(REPLY);
-				sed.setNode(index);
-				// 回复客户端
-//				PbftMain.send(sed.getOnode(), sed);
-				doSomething(sed);
-			}			
-		}
-	}
-
-	private void onPrepare(PbftMsg msg) {
-		if(!checkMsg(msg,false)) {
-			logger.info("异常消息[" +index+"]:"+msg);
-			return;
-		}
-		
-		String key = msg.getKey();
-		if(votes_pare.contains(key)){
-			// 说明已经投过票，不能重复投
-			return;
-		}
-		if(!votes_pre.contains(msg.getDataKey())){
-			// 必须先过预准备
-			return;
-		}
-		votes_pare.add(key);
-		
-		// 票数 +1
-		long agCou = aggre_pare.incrementAndGet(msg.getDataKey());
-		if(agCou >= 2*maxf+1){
-			aggre_pare.remove(msg.getDataKey());
-			// 进入提交阶段
-			PbftMsg sed = new PbftMsg(msg);
-			sed.setType(CM);
-			sed.setNode(index);
-			doneMsg.put(sed.getDataKey(), sed);
-			PbftMain.publish(sed);
-		}
-		// 后续的票数肯定凑不满，超时自动清除			
-	}
-
-	private void onPrePrepare(PbftMsg msg) {
-		if(!checkMsg(msg,true)) return;
-		
-		String key = msg.getDataKey();
-		if(votes_pre.contains(key)){
-			// 说明已经发起过，不能重复发起
-			return;
-		}
-		votes_pre.add(key);
-		// 启动超时控制
-		timeOuts.put(key, System.currentTimeMillis());
-		// 移除请求超时，假如有请求的话
-		timeOutsReq.remove(msg.getData());
-		// 进入准备阶段
-		PbftMsg sed = new PbftMsg(msg);
-		sed.setType(PA);
-		sed.setNode(index);
+	/**
+	 * 初始化视图view
+	 */
+	public void pubView(){
+		PbftMsg sed = new PbftMsg(VIEW,index);
 		PbftMain.publish(sed);
-	}
-	
-	public boolean checkMsg(PbftMsg msg,boolean isPre){
-		return (msg.isOk() && msg.getVnum() == view 
-				// pre阶段校验
-				&& (!isPre || msg.getNode() == index || (getPriNode(view) == msg.getNode() && msg.getNo() > genNo.get())));
-	}
-	
-	public int getPriNode(int view2){
-		return view2%size;
-	}
-	
-	public void push(PbftMsg msg){
-		try {
-			this.qbm.put(msg);
-		} catch (InterruptedException e) {
-			e.printStackTrace();
-		}
 	}
 
 	public int getView() {

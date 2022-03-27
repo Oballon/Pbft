@@ -66,7 +66,7 @@ public class PbftMain {
 	 * @param msg
 	 */
 	public static void publish(PbftMsg msg){
-		logger.info("publish广播消息[" +msg.getNode()+"]:"+ msg);
+		//logger.info("publish广播消息[" +msg.getNode()+"]:"+ msg);
 		for(Pbft pbft:nodes){
 			// 模拟网络时延
 			TimerManager.schedule(()->{

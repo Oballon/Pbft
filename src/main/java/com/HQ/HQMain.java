@@ -65,7 +65,38 @@ static Logger logger = LoggerFactory.getLogger(HQMain.class);
 //			nodes.get(i).req("testB"+i);
 //		}		
 	}
+
+	public static void start(int hqnum) {
+		int num=0;
+		for(int i=0;i<size;i++) {
+			if(num == hqnum) {
+				break;
+			}else {
+				if(nodes.get(i).getCredit() == 100) {
+					num++;
+					HQnodes.add(nodes.get(i));
+				}else {
+					Bnodes.add(nodes.get(i));
+				}
+			}
+		}
+		for(int i=num;i<size;i++) {
+			Bnodes.add(nodes.get(i));
+		}
+		
+		for(int i=0;i<hqnum;i++) {
+			HQnodes.get(i).start();
+		}		
+	}
+		
 	
+	public static void Bstart() {
+		for(int i=0;i<Bnodes.size();i++) {
+			//Bnodes.get(i).setHQ(true);
+			Bnodes.get(i).start();
+		}
+	}
+
 	/**
 	 * 广播消息
 	 * @param msg
@@ -92,71 +123,13 @@ static Logger logger = LoggerFactory.getLogger(HQMain.class);
 		}
 	}
 	
-	public static void start(int hqnum) {
-		int num=0;
-		for(int i=0;i<size;i++) {
-			if(num == hqnum) {
-				break;
-			}else {
-				if(nodes.get(i).getCredit() == 100) {
-					num++;
-					HQnodes.add(nodes.get(i));
-				}else {
-					Bnodes.add(nodes.get(i));
-				}
-			}
-		}
-		for(int i=num;i<size;i++) {
-			Bnodes.add(nodes.get(i));
-		}
-		
-		for(int i=0;i<hqnum;i++) {
-			HQnodes.get(i).start();
-		}		
-	}
-//	public static void start(int hqnum) {
-//		int num=0;
-//		for(int i=0;i<size;i++) {
-//			if(num == hqnum) {
-//				break;
-//			}else {
-//				if(nodes.get(i).getCredit() == 100) {
-//					num++;
-//					HQnodes.add(nodes.get(i));
-//				}else {
-//					nodes.get(i).setHQ(false);
-//					Bnodes.add(nodes.get(i));
-//				}
-//			}
-//		}
-//		for(int i=num;i<size;i++) {
-//			nodes.get(i).setHQ(false);
-//			Bnodes.add(nodes.get(i));
-//		}
-//		
-//		for(int i=0;i<size;i++) {
-//			nodes.get(i).start();
-//		}
-//		
-//	}
-	
-	public static void Bstart() {
-		for(int i=0;i<Bnodes.size();i++) {
-			//Bnodes.get(i).setHQ(true);
-			Bnodes.get(i).start();
-		}
-	}
-	
-	
 	/**
 	 * 发送消息到指定节点
 	 * @param toIndex
 	 * @param msg
 	 */	
 	public static void send(int toIndex,HQMsg msg){
-		// 模拟网络时延
-		
-		
+		// 模拟网络时延		
 		TimerManager.schedule(()->{
 			nodes.get(toIndex).push(msg);
 			return null;

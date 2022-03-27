@@ -139,7 +139,18 @@ public class HQ {
 		}, 10, 100);
 		return this;
 	}	
-		
+			
+	/**
+	 * 请求入列
+	 * @param data
+	 * @throws InterruptedException 
+	 */
+	public void req(String data) throws InterruptedException{
+		HQMsg req = new HQMsg(HQ.HREQ, this.index);
+		req.setData(data);
+		reqQueue.put(req);
+	}	
+	
 	/**
 	 * 真实的发送请求
 	 * @return
@@ -156,13 +167,19 @@ public class HQ {
 	void doSendCurMsg(){
 		timeOutsReq.put(curMsg.getData(), System.currentTimeMillis());
 		HQMain.send(getPriNode(view), curMsg);
-	}
+	}	
+
+	private void doSomething(HQMsg msg) {
+		// 请求被允许，可放心执行
+		logger.info("请求执行成功[" +index+"]:"+msg);
+	}	
 	
 	protected boolean doAction(HQMsg msg) {
 		if(!isRun) return false;
 		if(msg != null){
 			logger.info("收到消息[" +index+"]:"+ msg);
 			switch (msg.getType()) {
+			//HQPBFT cases
 			case HREQ:
 				onHReq(msg);
 				break;
@@ -183,6 +200,7 @@ public class HQ {
 				onHReply(msg);
 				break;
 				
+			// PBFT cases	
 			case REQ:
 				onReq(msg);
 				break;			
@@ -200,8 +218,7 @@ public class HQ {
 				break;				
 			case REPLY:
 				onReply(msg);
-				break;
-				
+				break;				
 			case VIEW:
 				onGetView(msg);
 				break;			
@@ -291,16 +308,11 @@ public class HQ {
 		}
 		
 		String key = msg.getKey();
-		if(votes_pare.contains(key)){
-			// 说明已经投过票，不能重复投
+		if(votes_pare.contains(key) && !votes_pre.contains(msg.getDataKey())){
+			
 			return;
 		}
-		if(!votes_pre.contains(msg.getDataKey())){
-			// 必须先过预准备
-			return;
-		}
-		votes_pare.add(key);
-		
+		votes_pare.add(key);		
 		// 票数 +1
 		long agCou = aggre_pare.incrementAndGet(msg.getDataKey());
 		int hqnum = size - (size-1)/3;
@@ -312,8 +324,7 @@ public class HQ {
 				sed.setType(HCON);
 				sed.setNode(index);
 				doneMsg.put(sed.getDataKey(), sed);
-				HQMain.HQpublish(sed);
-				
+				HQMain.HQpublish(sed);				
 			}else {
 				num =0;
 				System.out.println("---------------------------------------存在拜占庭节点");
@@ -430,19 +441,12 @@ public class HQ {
 		if(!checkMsg(msg,false)) {
 			logger.info("异常消息[" +index+"]:"+msg);
 			return;
-		}
-		
+		}		
 		String key = msg.getKey();
-		if(votes_pare.contains(key)){
-			// 说明已经投过票，不能重复投
+		if(votes_pare.contains(key) && !votes_pre.contains(msg.getDataKey())){
 			return;
 		}
-		if(!votes_pre.contains(msg.getDataKey())){
-			// 必须先过预准备
-			return;
-		}
-		votes_pare.add(key);
-		
+		votes_pare.add(key);		
 		// 票数 +1
 		long agCou = aggre_pare.incrementAndGet(msg.getDataKey());
 		if(agCou >= 2*maxf+1){
@@ -461,16 +465,10 @@ public class HQ {
 		if(!checkMsg(msg,false)) return;
 		// data模拟数据摘要
 		String key = msg.getKey();
-		if(votes_comm.contains(key)){
+		if(votes_comm.contains(key) && !votes_pare.contains(key)){
 			// 说明该节点对该项数据已经投过票，不能重复投
 			return;
-		}
-		if(!votes_pare.contains(key)){
-			// 必须先过准备
-            //logger.info("---------------------必须先过准备----:"+key);
-			return;
-		}
-		
+		}		
 		votes_comm.add(key);
 		// 票数 +1
 		long agCou = aggre_comm.incrementAndGet(msg.getDataKey());
@@ -478,8 +476,7 @@ public class HQ {
 			if(credit<100) {
 				credit = credit +10;
 				if(credit>100) credit =100;
-			}
-			
+			}			
 			remove(msg.getDataKey());
 			if(msg.getNode() != index){
 				this.genNo.set(msg.getNo());
@@ -510,11 +507,6 @@ public class HQ {
 			doSomething(msg);
 //		}
 	}
-
-	private void doSomething(HQMsg msg) {
-		// 请求被允许，可放心执行
-		logger.info("请求执行成功[" +index+"]:"+msg);
-	}	
 	
 	public boolean checkMsg(HQMsg msg,boolean isPre){
 		return (msg.isOk() && msg.getVnum() == view 
@@ -568,6 +560,7 @@ public class HQ {
 				remo.add(item.getKey());
 			}
 		}
+		
 		remo.forEach((it)->{
 			remove(it);
 		});
@@ -683,17 +676,6 @@ public class HQ {
 		aggre_comm.remove(it);
 		timeOuts.remove(it);
 	}
-	
-	/**
-	 * 请求入列
-	 * @param data
-	 * @throws InterruptedException 
-	 */
-	public void req(String data) throws InterruptedException{
-		HQMsg req = new HQMsg(HQ.HREQ, this.index);
-		req.setData(data);
-		reqQueue.put(req);
-	}	
 	
 	public void close(){
 		logger.info("宕机[" +index+"]--------------");

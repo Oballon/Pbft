@@ -66,7 +66,7 @@ public class Pbft {
 	
 	// 请求超时，view加1，重试
 	private Map<String,Long> timeOutsReq = Maps.newHashMap();
-	// 发送队列
+	// 请求队列
 	private BlockingQueue<PbftMsg> reqQueue = Queues.newLinkedBlockingDeque(100);
 	// 当前请求
 	private PbftMsg curMsg;
@@ -89,9 +89,8 @@ public class Pbft {
 				while (true) {
 					try {
 						//从消息队列中取出一个消息
-						logger.info("pbft run");
-						PbftMsg msg = qbm.take();
-						
+						//logger.info("pbft run");
+						PbftMsg msg = qbm.take();						
 						doAction(msg);
 					} catch (InterruptedException e) {
 						e.printStackTrace();
@@ -116,6 +115,17 @@ public class Pbft {
 			}
 		}, 10, 100);
 		return this;
+	}	
+	
+	/**
+	 * 请求入列
+	 * @param data
+	 * @throws InterruptedException 
+	 */
+	public void req(String data) throws InterruptedException{
+		PbftMsg req = new PbftMsg(Pbft.REQ, this.index);
+		req.setData(data);
+		reqQueue.put(req);		
 	}
 	
 	/**
@@ -142,10 +152,10 @@ public class Pbft {
 	}
 	
 	protected boolean doAction(PbftMsg msg) {
-		logger.info("doaction");
+		//logger.info("doaction");
 		if(!isRun) return false;
 		if(msg != null){
-			logger.info("收到消息[" +index+"]:"+ msg);
+			//logger.info("收到消息[" +index+"]:"+ msg);
 			switch (msg.getType()) {
 			case REQ:
 				onReq(msg);
@@ -204,7 +214,7 @@ public class Pbft {
 				// 认为客户端进行了CV投票
 				votes_vnum.add(msg.getNode()+"@"+(msg.getVnum()+1));
 				vnumAggreCount.incrementAndGet(msg.getVnum()+1);
-				// 未处理，说明可能主节点宕机，转发给主节点试试
+				// 未处理，说明可能主节点宕机，转发主节点试试
 				logger.info("转发主节点[" +index+"]:"+ msg);
 				PbftMain.send(getPriNode(view), sed);
 				timeOutsReq.put(msg.getData(), System.currentTimeMillis());
@@ -240,14 +250,11 @@ public class Pbft {
 		}
 		
 		String key = msg.getKey();
-		if(votes_pare.contains(key)){
+		if(votes_pare.contains(key) && !votes_pre.contains(msg.getDataKey())){
 			// 说明已经投过票，不能重复投
 			return;
 		}
-		if(!votes_pre.contains(msg.getDataKey())){
-			// 必须先过预准备
-			return;
-		}
+
 		votes_pare.add(key);
 		
 		// 票数 +1
@@ -268,16 +275,11 @@ public class Pbft {
 		if(!checkMsg(msg,false)) return;
 		// data模拟数据摘要
 		String key = msg.getKey();
-		if(votes_comm.contains(key)){
+		if(votes_comm.contains(key) && !votes_pare.contains(key)){
 			// 说明该节点对该项数据已经投过票，不能重复投
 			return;
 		}
-		if(!votes_pare.contains(key)){
-			// 必须先过准备
-//			logger.info("---------------------必须先过准备----:"+key);
-			return;
-		}
-		
+				
 		votes_comm.add(key);
 		// 票数 +1
 		long agCou = aggre_comm.incrementAndGet(msg.getDataKey());
@@ -416,17 +418,6 @@ public class Pbft {
 		} catch (InterruptedException e) {
 			e.printStackTrace();
 		}
-	}
-	
-	/**
-	 * 请求入列
-	 * @param data
-	 * @throws InterruptedException 
-	 */
-	public void req(String data) throws InterruptedException{
-		PbftMsg req = new PbftMsg(Pbft.REQ, this.index);
-		req.setData(data);
-		reqQueue.put(req);		
 	}
 
 	// 清理请求相关状态

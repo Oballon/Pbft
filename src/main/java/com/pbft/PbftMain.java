@@ -11,9 +11,9 @@ public class PbftMain {
 
 	static Logger logger = LoggerFactory.getLogger(PbftMain.class);
 	
-	public static final int size =4;
+	public static final int SIZE =4;
 	
-	private static List<Pbft> nodes = Lists.newArrayList();
+	private static List<Pbft> Nodes = Lists.newArrayList();
 	
 	private static Random r = new Random();
 	
@@ -21,14 +21,14 @@ public class PbftMain {
 	
 	public static void main(String[] args) throws InterruptedException {
 		
-		for(int i=0;i<size;i++){
-			nodes.add(new Pbft(i,size).start());
+		for(int i=0;i<SIZE;i++){
+			Nodes.add(new Pbft(i,SIZE).start());
 		}
 
 		System.out.println("初始化模拟网络");
 		// 初始化模拟网络
-		for(int i=0;i<size;i++){
-			for(int j=0;j<size;j++){
+		for(int i=0;i<SIZE;i++){
+			for(int j=0;j<SIZE;j++){
 				if(i != j){
 					// 随机延时
 					net[i*10+j] = RandomUtils.nextLong(10, 60);
@@ -40,24 +40,24 @@ public class PbftMain {
 		
 		// 模拟请求端发送请求
 		for(int i=0;i<1;i++){
-			int node = r.nextInt(size);
-			nodes.get(node).req("test"+i);
+			int node = r.nextInt(SIZE);
+			Nodes.get(node).req("test"+i);
 		}
 		
 //		Thread.sleep(10000);
 //		System.out.println("9--------------------------------------------------------");
 //		// 1秒后，主节点宕机
-//		nodes.get(0).close();
+//		Nodes.get(0).close();
 //		for(int i=2;i<4;i++){
-//			nodes.get(i).req("testD"+i);
+//			Nodes.get(i).req("testD"+i);
 //		}
 //		//1秒后恢复
 //		Thread.sleep(1000);
 //		System.out.println("9--------------------------------------------------------");
 //
-//		nodes.get(0).back();
+//		Nodes.get(0).back();
 //		for(int i=1;i<2;i++){
-//			nodes.get(i).req("testB"+i);
+//			Nodes.get(i).req("testB"+i);
 //		}		
 	}
 	
@@ -67,7 +67,7 @@ public class PbftMain {
 	 */
 	public static void publish(PbftMsg msg){
 		//logger.info("publish广播消息[" +msg.getNode()+"]:"+ msg);
-		for(Pbft pbft:nodes){
+		for(Pbft pbft:Nodes){
 			// 模拟网络时延
 			TimerManager.schedule(()->{
 				pbft.push(new PbftMsg(msg));
@@ -84,7 +84,7 @@ public class PbftMain {
 	public static void send(int toIndex,PbftMsg msg){
 		// 模拟网络时延
 		TimerManager.schedule(()->{
-			nodes.get(toIndex).push(msg);
+			Nodes.get(toIndex).push(msg);
 			return null;
 		}, net[msg.getNode()*10+toIndex]);
 	}

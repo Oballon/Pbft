@@ -9,14 +9,15 @@ import com.google.common.collect.Lists;
 import com.pbft.TimerManager;
 
 public class HQMain {
-static Logger logger = LoggerFactory.getLogger(HQMain.class);
 	
-	public static final int size =22;	
+	static Logger logger = LoggerFactory.getLogger(HQMain.class);
+	
+	public static final int SIZE =22;	
 	
 	private static List<HQ> nodes = Lists.newArrayList();
 	
-	private static List<HQ> HQnodes = Lists.newArrayList();
-	private static List<HQ> Bnodes = Lists.newArrayList();
+	private static List<HQ> hqNodes = Lists.newArrayList();
+	private static List<HQ> byzantiumNodes = Lists.newArrayList();
 	
 	private static Random r = new Random();
 	
@@ -24,16 +25,16 @@ static Logger logger = LoggerFactory.getLogger(HQMain.class);
 	
 	public static void main(String[] args) throws InterruptedException {
 		
-		for(int i=0;i<size;i++){
-			nodes.add(new HQ(i,size,false,true));
+		for(int i=0;i<SIZE;i++){
+			nodes.add(new HQ(i,SIZE,false,true));
 		}
-		int hqnum = size - (size-1)/3;
+		int hqnum = SIZE - (SIZE-1)/3;
 		start(hqnum);
 		
 		nodes.get(1).setByzt();
 		// 初始化模拟网络
-		for(int i=0;i<size;i++){
-			for(int j=0;j<size;j++){
+		for(int i=0;i<SIZE;i++){
+			for(int j=0;j<SIZE;j++){
 				if(i != j){
 					// 随机延时
 					net[i*10+j] = 10;
@@ -45,7 +46,7 @@ static Logger logger = LoggerFactory.getLogger(HQMain.class);
 		
 		// 模拟请求端发送请求
 		for(int i=0;i<1;i++){
-			int node = r.nextInt(size);
+			int node = r.nextInt(SIZE);
 			nodes.get(node).req("test"+i);
 		}
 		
@@ -67,33 +68,24 @@ static Logger logger = LoggerFactory.getLogger(HQMain.class);
 	}
 
 	public static void start(int hqnum) {
-		int num=0;
-		for(int i=0;i<size;i++) {
-			if(num == hqnum) {
-				break;
+		for(int i=0;i<hqnum;i++) {
+			if(nodes.get(i).getCredit() == 100) {
+				hqNodes.add(nodes.get(i));
 			}else {
-				if(nodes.get(i).getCredit() == 100) {
-					num++;
-					HQnodes.add(nodes.get(i));
-				}else {
-					Bnodes.add(nodes.get(i));
-				}
+				byzantiumNodes.add(nodes.get(i));
 			}
-		}
-		for(int i=num;i<size;i++) {
-			Bnodes.add(nodes.get(i));
 		}
 		
 		for(int i=0;i<hqnum;i++) {
-			HQnodes.get(i).start();
+			hqNodes.get(i).start();
 		}		
 	}
 		
 	
 	public static void Bstart() {
-		for(int i=0;i<Bnodes.size();i++) {
-			//Bnodes.get(i).setHQ(true);
-			Bnodes.get(i).start();
+		for(int i=0;i<byzantiumNodes.size();i++) {
+			//byzantiumNodes.get(i).setHQ(true);
+			byzantiumNodes.get(i).start();
 		}
 	}
 
@@ -103,7 +95,7 @@ static Logger logger = LoggerFactory.getLogger(HQMain.class);
 	 */
 	public static void HQpublish(HQMsg msg){
 		logger.info("HQpublish广播消息[" +msg.getNode()+"]:"+ msg);
-		for(HQ hq:HQnodes){
+		for(HQ hq:hqNodes){
 			// 模拟网络时延
 			TimerManager.schedule(()->{
 				hq.push(new HQMsg(msg));

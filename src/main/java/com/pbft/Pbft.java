@@ -305,7 +305,7 @@ public class Pbft {
 	
 	private void onReply(PbftMsg msg) {
 		if(curMsg == null || !curMsg.getData().equals(msg.getData()))return;
-		long count = replyCount.incrementAndGet();
+//		long count = replyCount.incrementAndGet();
 //		if(count >= maxf+1){
 //			logger.info("消息确认成功[" +index+"]:"+ msg);
 			replyCount.set(0);

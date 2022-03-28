@@ -21,10 +21,8 @@ import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.AtomicLongMap;
 
 
-import com.pbft.*;
 
-
-public class HQ {
+public class HQ implements Comparable<HQ>{
 	
 	Logger logger = LoggerFactory.getLogger(getClass());
 	
@@ -137,6 +135,7 @@ public class HQ {
 				checkHTimer();
 			}
 		}, 10, 100);
+		
 		return this;
 	}	
 			
@@ -251,8 +250,7 @@ public class HQ {
 			HQMain.HQpublish(sed);
 		}else if(msg.getNode() != index){ // 自身忽略
 			// 非主节点收到，说明可能主节点宕机
-			if(doneMsg.containsKey(msg.getDataKey())){
-				
+			if(doneMsg.containsKey(msg.getDataKey())){				
 				// 已经处理过，直接回复
 				sed.setType(REPLY);
 				HQMain.send(msg.getNode(), sed);
@@ -309,7 +307,6 @@ public class HQ {
 		
 		String key = msg.getKey();
 		if(votes_pare.contains(key) && !votes_pre.contains(msg.getDataKey())){
-			
 			return;
 		}
 		votes_pare.add(key);		
@@ -327,7 +324,7 @@ public class HQ {
 				HQMain.HQpublish(sed);				
 			}else {
 				num =0;
-				System.out.println("---------------------------------------存在拜占庭节点");
+				System.out.println("-----------------------存在拜占庭节点----------------------");
 				HQMain.Bstart();
 				HQMsg sed = new HQMsg(msg);
 				sed.setType(REQ);
@@ -341,7 +338,7 @@ public class HQ {
 	private void onHCommit(HQMsg msg) {
 		if(!checkMsg(msg,false)) return;
 		// data模拟数据摘要
-		String key = msg.getKey();
+		//String key = msg.getKey();
 		
 		if(msg.getNode() != index){
 			this.genNo.set(msg.getNo());
@@ -511,7 +508,8 @@ public class HQ {
 	public boolean checkMsg(HQMsg msg,boolean isPre){
 		return (msg.isOk() && msg.getVnum() == view 
 				// pre阶段校验
-				&& (!isPre || msg.getNode() == index || (getPriNode(view) == msg.getNode() && msg.getNo() > genNo.get())));
+				&& (!isPre || msg.getNode() == index || (getPriNode(view) == msg.getNode() 
+				&& msg.getNo() > genNo.get())));
 	}	
 
 	/**
@@ -549,48 +547,7 @@ public class HQ {
 			}			
 		});		
 	}
-	
-	
-	private void checkTimer() {
-		List<String> remo = Lists.newArrayList();
-		for(Entry<String, Long> item : timeOuts.entrySet()){
-			if(System.currentTimeMillis() - item.getValue() > 1000){
-				// 超时还没达成一致，则本次投票无效
-				logger.info("投票无效["+index+"]:"+ item.getKey());
-				remo.add(item.getKey());
-			}
-		}
 		
-		remo.forEach((it)->{
-			remove(it);
-		});
-		
-		remo.clear();
-		for(Entry<String, Long> item : timeOutsReq.entrySet()){
-			if(System.currentTimeMillis() - item.getValue() > 600){
-				// 请求超时
-				remo.add(item.getKey());
-			}
-		}
-		remo.forEach((data)->{
-			logger.info("请求主节点超时["+index+"]:"+data);
-			timeOutsReq.remove(data);
-			if(curMsg != null && curMsg.getData().equals(data)){
-				// 作为客户端发起节点
-				vnumAggreCount.incrementAndGet(this.view+1);
-				votes_vnum.add(index+"@"+(this.view+1));
-				HQMain.publish(curMsg);
-			}else{
-				if(!this.viewOk) return; // 已经开始选举视图，不用重复发起
-				this.viewOk = false;
-				// 作为副本节点，广播视图变更投票
-				PbftMsg cv = new PbftMsg(CV, this.index);
-				cv.setVnum(this.view+1);
-				PbftMain.publish(cv);
-			}			
-		});		
-	}
-	
 	public int getPriNode(int view2){
 		return view2%size;
 	}
@@ -708,4 +665,9 @@ public class HQ {
 		this.isHQ = isHQ;
 	}
 
+// Implement comparable interface
+    @Override
+    public int compareTo(HQ o) {
+       return this.credit - o.credit;
+    }
 }

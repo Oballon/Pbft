@@ -1,6 +1,7 @@
 package com.HQ;
 
 import java.util.List;
+import java.util.Collections;
 import java.util.Random;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -12,12 +13,15 @@ public class HQMain {
 	
 	static Logger logger = LoggerFactory.getLogger(HQMain.class);
 	
-	public static final int SIZE =22;	
+	public static final int SIZE =10;	
+	public static final int CREDIT_LEVEL = 3;
+	public static final int MIN_CONSENSUS_NUM = 5;  //最小共识节点数
+	public static final int MAX_CONSENSUS_NUM = SIZE/2;  //最大共识节点数
 	
 	private static List<HQ> nodes = Lists.newArrayList();
 	
-	private static List<HQ> hqNodes = Lists.newArrayList();
-	private static List<HQ> byzantiumNodes = Lists.newArrayList();
+	private static List<HQ> consensusNodes = Lists.newArrayList(); 
+	private static List<HQ> candidateNodes = Lists.newArrayList(); 
 	
 	private static Random r = new Random();
 	
@@ -28,9 +32,9 @@ public class HQMain {
 		for(int i=0;i<SIZE;i++){
 			nodes.add(new HQ(i,SIZE,false,true));
 		}
-		int hqnum = SIZE - (SIZE-1)/3;
-		start(hqnum);
-		
+
+		start();			
+
 		nodes.get(1).setByzt();
 		// 初始化模拟网络
 		for(int i=0;i<SIZE;i++){
@@ -66,36 +70,52 @@ public class HQMain {
 //			nodes.get(i).req("testB"+i);
 //		}		
 	}
-
-	public static void start(int hqnum) {
-		for(int i=0;i<hqnum;i++) {
-			if(nodes.get(i).getCredit() == 100) {
-				hqNodes.add(nodes.get(i));
+	
+	
+	public static void classifyNodes(int creditLevel, int maxQuantity) {
+		Collections.reverse(nodes);
+		for(int i=0;i<SIZE;i++) {
+			int num = 0;
+			if(nodes.get(i).getCredit() > creditLevel && num < maxQuantity) {
+				consensusNodes.add(nodes.get(i));
+				num++;
 			}else {
-				byzantiumNodes.add(nodes.get(i));
+				candidateNodes.add(nodes.get(i));
 			}
 		}
-		
-		for(int i=0;i<hqnum;i++) {
-			hqNodes.get(i).start();
-		}		
+	}	
+
+	
+	public static void start() {
+
+		classifyNodes(CREDIT_LEVEL,MAX_CONSENSUS_NUM);		
+
+		if (consensusNodes.size() < MIN_CONSENSUS_NUM) {
+			System.out.println("Unenough creditable nodes, there are less than "
+					+ MIN_CONSENSUS_NUM + "creditable nodes!");
+		}else {		
+			for(int i=0;i<consensusNodes.size();i++) {
+				consensusNodes.get(i).start();
+			}	
+		}
+		return;
 	}
 		
 	
 	public static void Bstart() {
-		for(int i=0;i<byzantiumNodes.size();i++) {
-			//byzantiumNodes.get(i).setHQ(true);
-			byzantiumNodes.get(i).start();
+		for(int i=0;i<candidateNodes.size();i++) {
+			//candidateNodes.get(i).setHQ(true);
+			candidateNodes.get(i).start();
 		}
 	}
 
 	/**
-	 * 广播消息
+	 * 向HQ节点广播消息
 	 * @param msg
 	 */
 	public static void HQpublish(HQMsg msg){
 		logger.info("HQpublish广播消息[" +msg.getNode()+"]:"+ msg);
-		for(HQ hq:hqNodes){
+		for(HQ hq:consensusNodes){
 			// 模拟网络时延
 			TimerManager.schedule(()->{
 				hq.push(new HQMsg(msg));
@@ -103,7 +123,11 @@ public class HQMain {
 			}, net[msg.getNode()*10+hq.getIndex()]);
 		}
 	}
-	
+
+	/**
+	 * 向所有节点广播消息
+	 * @param msg
+	 */
 	public static void publish(HQMsg msg){
 		logger.info("publish广播消息[" +msg.getNode()+"]:"+ msg);
 		for(HQ hq:nodes){
@@ -127,5 +151,6 @@ public class HQMain {
 			return null;
 		}, net[msg.getNode()*10+toIndex]);
 	}	
+
 
 }

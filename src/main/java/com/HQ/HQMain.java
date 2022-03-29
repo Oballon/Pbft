@@ -37,7 +37,7 @@ public class HQMain {
 
 		start();			
 
-		nodes.get(1).setByzt();
+		//nodes.get(1).setByzt();
 		// 初始化模拟网络
 		for(int i=0;i<SIZE;i++){
 			for(int j=0;j<SIZE;j++){
@@ -116,7 +116,7 @@ public class HQMain {
 	 * @param msg
 	 */
 	public static void HQpublish(HQMsg msg){
-		logger.info("HQpublish广播消息[" +msg.getNode()+"]:"+ msg);
+		//logger.info("HQpublish广播消息[" +msg.getNode()+"]:"+ msg);
 		for(HQ hq:consensusNodes){
 			// 模拟网络时延
 			TimerManager.schedule(()->{
@@ -131,7 +131,7 @@ public class HQMain {
 	 * @param msg
 	 */
 	public static void publish(HQMsg msg){
-		logger.info("publish广播消息[" +msg.getNode()+"]:"+ msg);
+//		logger.info("publish广播消息[" +msg.getNode()+"]:"+ msg);
 		for(HQ hq:nodes){
 			// 模拟网络时延
 			TimerManager.schedule(()->{

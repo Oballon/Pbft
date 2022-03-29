@@ -20,9 +20,6 @@ public class Pbft {
 
 	Logger logger = LoggerFactory.getLogger(getClass());
 	
-	public int size; // 总节点数
-	public int maxf; // 最大失效节点
-	
 	public static final int CV = -2; // 视图变更
 	public static final int VIEW = -1; // 请求视图
 	public static final int REQ = 0; // 请求数据
@@ -30,8 +27,15 @@ public class Pbft {
 	public static final int PA = 2; // 准备阶段
 	public static final int CM = 3; // 提交阶段
 	public static final int REPLY = 4; // 回复
+		
+	public int size; // 总节点数
+	public int maxf; // 最大失效节点	
+	private int index; // 节点标识
 	
+	private int view; // 视图view
+	private volatile boolean viewOk; // 视图状态
 	private volatile boolean isRun = false;
+
 	// 消息队列
 	private BlockingQueue<PbftMsg> qbm = Queues.newLinkedBlockingQueue();
 	// 预准备阶段投票信息
@@ -48,11 +52,6 @@ public class Pbft {
 	private Map<String,PbftMsg> doneMsg = Maps.newConcurrentMap();
 	// 作为主节点受理过的请求
 	private Map<String,PbftMsg> applyMsg = Maps.newConcurrentMap();
-	
-	private int index; // 节点标识
-	
-	private int view; // 视图view
-	private volatile boolean viewOk; // 视图状态
 	
 	// 视图初始化 投票情况
 	private AtomicLongMap<Integer> vnumAggreCount = AtomicLongMap.create();
@@ -365,7 +364,6 @@ public class Pbft {
 				// pre阶段校验
 				&& (!isPre || msg.getNode() == index || (getPriNode(view) == msg.getNode() && msg.getNo() > genNo.get())));
 	}
-	
 	
 	/**
 	 * 检测超时情况

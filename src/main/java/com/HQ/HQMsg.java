@@ -9,7 +9,8 @@ public class HQMsg {
 	private int onode; // 发起请求的节点
 	private int vnum; // 视图编号
 	private int no; // 序列号
-	private long time; // 时间戳
+	private long time = 0; // 时间戳
+	private long costTime;
 	private String data; // 数据,表示数据的hash,必须唯一
 	
 	public HQMsg(int type,int node) {
@@ -55,6 +56,10 @@ public class HQMsg {
 	public void setTime(long time) {
 		this.time = time;
 	}
+	
+	public void computCostTime() {
+		this.costTime = System.currentTimeMillis() - this.time;
+	}
 
 	public int getVnum() {
 		return vnum;
@@ -92,7 +97,7 @@ public class HQMsg {
 	@Override
 	public String toString() {
 		return "HQMsg [isOk=" + isOk + ", type=" + type + ", node=" + node + ", vnum=" + vnum + ", time=" + time
-				+ ", data=" + data + ", no=" + no + "]"+", onode=" + onode + "]";
+				+ ", costTime=" + costTime + ", data=" + data + ", no=" + no + "]"+", onode=" + onode + "]";
 	}
 
 	public int getNo() {

@@ -11,18 +11,20 @@ public class PbftMain {
 
 	static Logger logger = LoggerFactory.getLogger(PbftMain.class);
 	
-	public static final int SIZE =4;
+	public static final int SIZE = 4;	
+	public static final int LIMITE_SIZE = 100;
 	
-	private static List<Pbft> Nodes = Lists.newArrayList();
+	private static long[][] delayNet = new long[LIMITE_SIZE][LIMITE_SIZE];	
 	
-	private static Random r = new Random();
+	private static Random r = new Random();	
 	
-	private static long[] net = new long[9999];
+	private static List<Pbft> nodes = Lists.newArrayList();
+	
 	
 	public static void main(String[] args) throws InterruptedException {
 		
 		for(int i=0;i<SIZE;i++){
-			Nodes.add(new Pbft(i,SIZE).start());
+			nodes.add(new Pbft(i,SIZE).start());
 		}
 
 		System.out.println("初始化模拟网络");
@@ -31,9 +33,9 @@ public class PbftMain {
 			for(int j=0;j<SIZE;j++){
 				if(i != j){
 					// 随机延时
-					net[i*10+j] = RandomUtils.nextLong(10, 60);
+					delayNet[i][j] = RandomUtils.nextLong(10, 60);
 				}else{
-					net[i*10+j] = 10;
+					delayNet[i][j] = 10;
 				}
 			}
 		}		
@@ -41,23 +43,23 @@ public class PbftMain {
 		// 模拟请求端发送请求
 		for(int i=0;i<1;i++){
 			int node = r.nextInt(SIZE);
-			Nodes.get(node).req("test"+i);
+			nodes.get(node).req("test"+i);
 		}
 		
 //		Thread.sleep(10000);
 //		System.out.println("9--------------------------------------------------------");
 //		// 1秒后，主节点宕机
-//		Nodes.get(0).close();
+//		nodes.get(0).close();
 //		for(int i=2;i<4;i++){
-//			Nodes.get(i).req("testD"+i);
+//			nodes.get(i).req("testD"+i);
 //		}
 //		//1秒后恢复
 //		Thread.sleep(1000);
 //		System.out.println("9--------------------------------------------------------");
 //
-//		Nodes.get(0).back();
+//		nodes.get(0).back();
 //		for(int i=1;i<2;i++){
-//			Nodes.get(i).req("testB"+i);
+//			nodes.get(i).req("testB"+i);
 //		}		
 	}
 	
@@ -67,12 +69,12 @@ public class PbftMain {
 	 */
 	public static void publish(PbftMsg msg){
 		//logger.info("publish广播消息[" +msg.getNode()+"]:"+ msg);
-		for(Pbft pbft:Nodes){
+		for(Pbft pbft:nodes){
 			// 模拟网络时延
 			TimerManager.schedule(()->{
 				pbft.push(new PbftMsg(msg));
 				return null;
-			}, net[msg.getNode()*10+pbft.getIndex()]);
+			}, delayNet[msg.getNode()][pbft.getIndex()]);
 		}
 	}
 	
@@ -84,9 +86,9 @@ public class PbftMain {
 	public static void send(int toIndex,PbftMsg msg){
 		// 模拟网络时延
 		TimerManager.schedule(()->{
-			Nodes.get(toIndex).push(msg);
+			nodes.get(toIndex).push(new PbftMsg(msg));
 			return null;
-		}, net[msg.getNode()*10+toIndex]);
+		}, delayNet[msg.getNode()][toIndex]);
 	}
 	
 }

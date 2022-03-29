@@ -10,6 +10,7 @@ public class PbftMsg {
 	private int vnum; // 视图编号
 	private int no; // 序列号
 	private long time; // 时间戳
+	private long costTime;
 	private String data; // 数据,表示数据的hash,必须唯一
 	
 	public PbftMsg(int type,int node) {
@@ -54,6 +55,10 @@ public class PbftMsg {
 
 	public void setTime(long time) {
 		this.time = time;
+	}
+	
+	public void computCostTime() {
+		this.costTime = System.currentTimeMillis() - this.time;
 	}
 
 	public int getVnum() {

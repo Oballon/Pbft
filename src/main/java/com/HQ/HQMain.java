@@ -6,6 +6,8 @@ import java.util.Random;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.jfree.chart.*;
+
 import com.google.common.collect.Lists;
 import com.pbft.TimerManager;
 

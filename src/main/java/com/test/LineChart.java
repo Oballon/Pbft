@@ -65,4 +65,5 @@ public class LineChart extends JFrame {
       example.setVisible(true);  
     });  
   }  
+  
 }  

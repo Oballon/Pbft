@@ -124,6 +124,7 @@ public class Pbft {
 	 */
 	public void req(String data) throws InterruptedException{
 		PbftMsg req = new PbftMsg(Pbft.REQ, this.index);
+		req.setTime(System.currentTimeMillis());
 		req.setData(data);
 		reqQueue.put(req);		
 	}

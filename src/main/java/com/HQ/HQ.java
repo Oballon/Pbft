@@ -146,6 +146,7 @@ public class HQ implements Comparable<HQ>{
 	 */
 	public void req(String data) throws InterruptedException{
 		HQMsg req = new HQMsg(HQ.HREQ, this.index);
+		req.setTime(System.currentTimeMillis());
 		req.setData(data);
 		reqQueue.put(req);
 	}	

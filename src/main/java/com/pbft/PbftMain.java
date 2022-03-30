@@ -23,12 +23,8 @@ public class PbftMain {
 	
 	public static void main(String[] args) throws InterruptedException {
 		
-		for(int i=0;i<SIZE;i++){
-			nodes.add(new Pbft(i,SIZE).start());
-		}
-
-		System.out.println("初始化模拟网络");
-		// 初始化模拟网络
+		//初始化网络延迟
+		System.out.println("初始化网络延迟");		
 		for(int i=0;i<SIZE;i++){
 			for(int j=0;j<SIZE;j++){
 				if(i != j){
@@ -38,13 +34,19 @@ public class PbftMain {
 					delayNet[i][j] = 10;
 				}
 			}
-		}		
+		}	  
 		
-		// 模拟请求端发送请求
+		//多线程启动网络节点
+		for(int i=0;i<SIZE;i++){
+			nodes.add(new Pbft(i,SIZE).start());
+		}
+		
+		//模拟请求端发送请求
 		for(int i=0;i<1;i++){
 			int node = r.nextInt(SIZE);
 			nodes.get(node).req("test"+i);
 		}
+
 		
 //		Thread.sleep(10000);
 //		System.out.println("9--------------------------------------------------------");
@@ -62,7 +64,7 @@ public class PbftMain {
 //			nodes.get(i).req("testB"+i);
 //		}		
 	}
-	
+
 	/**
 	 * 广播消息
 	 * @param msg

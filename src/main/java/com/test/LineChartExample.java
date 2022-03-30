@@ -1,19 +1,20 @@
 package com.test;
 
 import javax.swing.JFrame;  
-import javax.swing.SwingUtilities;  
-  
+import javax.swing.SwingUtilities;
+import javax.swing.WindowConstants;
+
+import org.apache.commons.lang3.RandomUtils;
 import org.jfree.chart.ChartFactory;  
 import org.jfree.chart.ChartPanel;  
 import org.jfree.chart.JFreeChart;  
 import org.jfree.data.category.DefaultCategoryDataset;  
-
   
-public class LineChart extends JFrame {  
+public class LineChartExample extends JFrame {  
   
   private static final long serialVersionUID = 1L;  
   
-  public LineChart(String title) {  
+  public LineChartExample(String title) {  
     super(title);  
     // Create dataset  
     DefaultCategoryDataset dataset = createDataset();  
@@ -51,19 +52,19 @@ public class LineChart extends JFrame {
     dataset.addValue(200, series2, "2016-12-23");  
     dataset.addValue(180, series2, "2016-12-24");  
     dataset.addValue(230, series2, "2016-12-25");  
+
   
     return dataset;  
   }  
   
   public static void main(String[] args) {  
     SwingUtilities.invokeLater(() -> {  
-      LineChart example = new LineChart("Line Chart Example");  
+      LineChartExample example = new LineChartExample("Line Chart Example");  
       example.setAlwaysOnTop(true);  
       example.pack();  
       example.setSize(600, 400);  
-      example.setDefaultCloseOperation(EXIT_ON_CLOSE);  
+      example.setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);  
       example.setVisible(true);  
     });  
   }  
-  
-}  
+} 

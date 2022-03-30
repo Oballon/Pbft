@@ -38,20 +38,20 @@ public class Pbft {
 
 	// 消息队列
 	private BlockingQueue<PbftMsg> qbm = Queues.newLinkedBlockingQueue();
-	// 预准备阶段投票信息
-	private Set<String> votes_pre = Sets.newConcurrentHashSet();
 	
+	// 预准备阶段投票信息
+	private Set<String> votes_pre = Sets.newConcurrentHashSet();	
 	// 准备阶段投票信息
 	private Set<String> votes_pare = Sets.newConcurrentHashSet();
-	private AtomicLongMap<String> aggre_pare = AtomicLongMap.create();
-	
+	private AtomicLongMap<String> aggre_pare = AtomicLongMap.create();	
 	// 提交阶段投票信息
 	private Set<String> votes_comm = Sets.newConcurrentHashSet();
 	private AtomicLongMap<String> aggre_comm = AtomicLongMap.create();
+	
 	// 成功处理过的请求
-	private Map<String,PbftMsg> doneMsg = Maps.newConcurrentMap();
+	private Map<String,PbftMsg> doneReq = Maps.newConcurrentMap();
 	// 作为主节点受理过的请求
-	private Map<String,PbftMsg> applyMsg = Maps.newConcurrentMap();
+	private Map<String,PbftMsg> applyReq = Maps.newConcurrentMap();
 	
 	// 视图初始化 投票情况
 	private AtomicLongMap<Integer> vnumAggreCount = AtomicLongMap.create();
@@ -60,10 +60,9 @@ public class Pbft {
 	// 请求响应回复情况
 	private AtomicLong replyCount = new AtomicLong();
 	
-	// pbft超时
-	private Map<String,Long> timeOuts = Maps.newHashMap();
-	
-	// 请求超时，view加1，重试
+	// 消息超时
+	private Map<String,Long> timeOuts = Maps.newHashMap();	
+	// 请求超时
 	private Map<String,Long> timeOutsReq = Maps.newHashMap();
 	// 请求队列
 	private BlockingQueue<PbftMsg> reqQueue = Queues.newLinkedBlockingDeque(100);
@@ -88,7 +87,7 @@ public class Pbft {
 				while (true) {
 					try {
 						//从消息队列中取出一个消息
-						logger.info("pbft run");
+						//logger.info("pbft run");
 						PbftMsg msg = qbm.take();						
 						doAction(msg);
 					} catch (InterruptedException e) {
@@ -98,7 +97,7 @@ public class Pbft {
 			}
 		}).start();
 		
-		logger.info("开始初始化");
+		//logger.info("开始初始化");
 		isRun = true;
 		timer.schedule(new TimerTask() {
 			int co = 0;
@@ -117,7 +116,7 @@ public class Pbft {
 	}	
 	
 	/**
-	 * 请求入列
+	 * 产生请求
 	 * @param data
 	 * @throws InterruptedException 
 	 */
@@ -125,11 +124,12 @@ public class Pbft {
 		PbftMsg req = new PbftMsg(Pbft.REQ, this.index);
 		req.setTime(System.currentTimeMillis());
 		req.setData(data);
+		req.setOnode(index);
 		reqQueue.put(req);		
 	}
 	
 	/**
-	 * 真实的发送请求
+	 * 发出请求
 	 * @return
 	 */
 	protected boolean doReq() {
@@ -137,6 +137,7 @@ public class Pbft {
 		curMsg = reqQueue.poll();
 		if(curMsg == null)return false;
 		curMsg.setVnum(this.view);
+		curMsg.setTime(System.currentTimeMillis());
 		doSendCurMsg();
 		return true;
 	}	
@@ -146,30 +147,22 @@ public class Pbft {
 		PbftMain.send(getPriNode(view), curMsg);
 	}
 	
-	private void doSomething(PbftMsg msg) {
-		// 请求被允许，可放心执行
-		logger.info("请求执行成功[" +index+"]:"+msg);
-	}
-	
 	protected boolean doAction(PbftMsg msg) {
-		logger.info("doaction");
+		//logger.info("doaction");
 		if(!isRun) return false;
 		if(msg != null){
-			logger.info("收到消息[" +index+"]:"+ msg);
+			//logger.info("收到消息[" +index+"]:"+ msg);
 			switch (msg.getType()) {
 			case REQ:
 				onReq(msg);
 				break;
 			case PP:
-				// prepre
 				onPrePrepare(msg);
 				break;
 			case PA:
-				// prepare
 				onPrepare(msg);
 				break;
 			case CM:
-				// commit
 				onCommit(msg);
 				break;
 			case REPLY:
@@ -195,8 +188,8 @@ public class Pbft {
 		sed.setNode(index);
 		if(msg.getVnum() < view) return;
 		if(msg.getVnum() == index){
-			if(applyMsg.containsKey(msg.getDataKey())) return; // 已经受理过
-			applyMsg.put(msg.getDataKey(), msg);
+			if(applyReq.containsKey(msg.getDataKey())) return; // 已经受理过
+			applyReq.put(msg.getDataKey(), msg);
 			// 主节点收到C的请求后进行广播
 			sed.setType(PP);
 //			sed.setVnum(view);
@@ -206,7 +199,7 @@ public class Pbft {
 			PbftMain.publish(sed);
 		}else if(msg.getNode() != index){ // 自身忽略
 			// 非主节点收到，说明可能主节点宕机
-			if(doneMsg.containsKey(msg.getDataKey())){
+			if(doneReq.containsKey(msg.getDataKey())){
 				// 已经处理过，直接回复
 				sed.setType(REPLY);
 				PbftMain.send(msg.getNode(), sed);
@@ -215,7 +208,7 @@ public class Pbft {
 				votes_vnum.add(msg.getNode()+"@"+(msg.getVnum()+1));
 				vnumAggreCount.incrementAndGet(msg.getVnum()+1);
 				// 未处理，说明可能主节点宕机，转发主节点试试
-				logger.info("转发主节点[" +index+"]:"+ msg);
+				//logger.info("转发主节点[" +index+"]:"+ msg);
 				PbftMain.send(getPriNode(view), sed);
 				timeOutsReq.put(msg.getData(), System.currentTimeMillis());
 			}			
@@ -243,7 +236,7 @@ public class Pbft {
 
 	private void onPrepare(PbftMsg msg) {
 		if(!checkMsg(msg,false)) {
-			logger.info("异常消息[" +index+"]:"+msg);
+			//logger.info("异常消息[" +index+"]:"+msg);
 			return;
 		}
 		
@@ -263,7 +256,7 @@ public class Pbft {
 			PbftMsg sed = new PbftMsg(msg);
 			sed.setType(CM);
 			sed.setNode(index);
-			doneMsg.put(sed.getDataKey(), sed);
+			doneReq.put(sed.getDataKey(), sed);
 			PbftMain.publish(sed);
 		}
 		// 后续的票数肯定凑不满，超时自动清除			
@@ -272,12 +265,9 @@ public class Pbft {
 	private void onCommit(PbftMsg msg) {
 		if(!checkMsg(msg,false)) return;
 		// data模拟数据摘要
-		String key = msg.getKey();
-		if(votes_comm.contains(key) && !votes_pare.contains(key)){
-			// 说明该节点对该项数据已经投过票，不能重复投
-			return;
-		}
-				
+		String key = msg.getKey();		
+		if(votes_comm.contains(key) && !votes_pare.contains(key)) return;		
+						
 		votes_comm.add(key);
 		// 票数 +1
 		long agCou = aggre_comm.incrementAndGet(msg.getDataKey());
@@ -295,8 +285,7 @@ public class Pbft {
 				sed.setType(REPLY);
 				sed.setNode(index);
 				// 回复客户端
-//				PbftMain.send(sed.getOnode(), sed);
-				doSomething(sed);
+				PbftMain.send(sed.getOnode(), sed);
 			}			
 		}
 	}
@@ -305,11 +294,13 @@ public class Pbft {
 		if(curMsg == null || !curMsg.getData().equals(msg.getData()))return;
 		long count = replyCount.incrementAndGet();
 		if(count >= maxf+1){
-			logger.info("消息确认成功[" +index+"]:"+ msg);
+			//logger.info("消息确认成功[" +index+"]:"+ msg);
 			replyCount.set(0);
 			curMsg = null; // 当前请求已经完成
-			// 执行相关逻辑
-			doSomething(msg);
+			// 执行相关逻辑					
+			PbftMain.collectTimes(msg.computCostTime());
+			//logger.info("请求执行成功[" +index+"]:"+msg);
+			
 		}
 	}
 
@@ -330,7 +321,7 @@ public class Pbft {
 				vnumAggreCount.clear();
 				this.view = msg.getVnum();
 				viewOk = true;
-				logger.info("视图初始化完成["+index+"]："+ view);
+				//logger.info("视图初始化完成["+index+"]："+ view);
 			}
 		}		
 	}
@@ -347,11 +338,11 @@ public class Pbft {
 			vnumAggreCount.clear();
 			this.view = msg.getVnum();
 			viewOk = true;
-			logger.info("视图变更完成["+index+"]："+ view);
+			//logger.info("视图变更完成["+index+"]："+ view);
 			// 可以继续发请求
 			if(curMsg != null){
 				curMsg.setVnum(this.view);
-				logger.info("请求重传["+index+"]："+ curMsg);
+				//logger.info("请求重传["+index+"]："+ curMsg);
 				doSendCurMsg();
 			}
 		}
@@ -371,7 +362,7 @@ public class Pbft {
 		for(Entry<String, Long> item : timeOuts.entrySet()){
 			if(System.currentTimeMillis() - item.getValue() > 1000){
 				// 超时还没达成一致，则本次投票无效
-				logger.info("投票无效["+index+"]:"+ item.getKey());
+				//logger.info("投票无效["+index+"]:"+ item.getKey());
 				remo.add(item.getKey());
 			}
 		}
@@ -387,7 +378,7 @@ public class Pbft {
 			}
 		}
 		remo.forEach((data)->{
-			logger.info("请求主节点超时["+index+"]:"+data);
+			//logger.info("请求主节点超时["+index+"]:"+data);
 			timeOutsReq.remove(data);
 			if(curMsg != null && curMsg.getData().equals(data)){
 				// 作为客户端发起节点
@@ -405,8 +396,8 @@ public class Pbft {
 		});		
 	}
 	
-	public int getPriNode(int view2){
-		return view2%size;
+	public int getPriNode(int view){
+		return view%size;
 	}
 	
 	public void push(PbftMsg msg){
@@ -432,7 +423,7 @@ public class Pbft {
 	}	
 	
 	/**
-	 * 初始化视图view
+	 * 广播视图view
 	 */
 	public void pubView(){
 		PbftMsg sed = new PbftMsg(VIEW,index);
@@ -448,7 +439,7 @@ public class Pbft {
 	}
 	
 	public void close(){
-		logger.info("宕机[" +index+"]--------------");
+		//logger.info("宕机[" +index+"]--------------");
 		this.isRun = false;
 	}
 
@@ -457,7 +448,7 @@ public class Pbft {
 	}
 
 	public void back() {
-		logger.info("恢复[" +index+"]--------------");
+		//logger.info("恢复[" +index+"]--------------");
 		this.isRun = true;
 	}
 }

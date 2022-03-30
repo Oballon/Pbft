@@ -1,11 +1,19 @@
 package com.pbft;
 
 import com.google.common.collect.Lists;
+
 import org.apache.commons.lang3.RandomUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
+
+import javax.swing.SwingUtilities;
+import javax.swing.WindowConstants;
+
+  
 
 public class PbftMain {
 
@@ -18,13 +26,14 @@ public class PbftMain {
 	
 	private static Random r = new Random();	
 	
+	private static List<Long> costTimes = new ArrayList<>(); 
+	
 	private static List<Pbft> nodes = Lists.newArrayList();
 	
 	
 	public static void main(String[] args) throws InterruptedException {
 		
 		//初始化网络延迟
-		System.out.println("初始化网络延迟");		
 		for(int i=0;i<SIZE;i++){
 			for(int j=0;j<SIZE;j++){
 				if(i != j){
@@ -41,12 +50,26 @@ public class PbftMain {
 			nodes.add(new Pbft(i,SIZE).start());
 		}
 		
-		//模拟请求端发送请求
-		for(int i=0;i<1;i++){
+		//全网节点随机产生请求
+		for(int i=0;i<5;i++){
 			int node = r.nextInt(SIZE);
 			nodes.get(node).req("test"+i);
 		}
 
+		Thread.sleep(3000);
+
+    	LineChart example = new LineChart(costTimes);
+	    SwingUtilities.invokeLater(() -> {    
+			example.setAlwaysOnTop(false);  
+			example.pack();  
+			example.setSize(600, 400);  
+			example.setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);  
+			example.setVisible(true);  
+	    });  
+//
+//		Thread.sleep(5000);     
+//		
+//		example.changeDataset(cost());
 		
 //		Thread.sleep(10000);
 //		System.out.println("9--------------------------------------------------------");
@@ -92,5 +115,18 @@ public class PbftMain {
 			return null;
 		}, delayNet[msg.getNode()][toIndex]);
 	}
+	
+	public static void collectTimes(long costTime) {
+		costTimes.add(costTime);
+		System.out.println(costTime);
+	}	
+
+    public static List<Long> costTest(){
+		List<Long> cost = new ArrayList<>();
+	    for(int i=0;i<20;i++) {
+	    	cost.add(RandomUtils.nextLong(10, 60));
+	    }
+	    return cost;
+    }
 	
 }

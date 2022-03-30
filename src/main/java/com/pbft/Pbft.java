@@ -88,7 +88,7 @@ public class Pbft {
 				while (true) {
 					try {
 						//从消息队列中取出一个消息
-						//logger.info("pbft run");
+						logger.info("pbft run");
 						PbftMsg msg = qbm.take();						
 						doAction(msg);
 					} catch (InterruptedException e) {
@@ -152,10 +152,10 @@ public class Pbft {
 	}
 	
 	protected boolean doAction(PbftMsg msg) {
-		//logger.info("doaction");
+		logger.info("doaction");
 		if(!isRun) return false;
 		if(msg != null){
-			//logger.info("收到消息[" +index+"]:"+ msg);
+			logger.info("收到消息[" +index+"]:"+ msg);
 			switch (msg.getType()) {
 			case REQ:
 				onReq(msg);
@@ -226,10 +226,8 @@ public class Pbft {
 		if(!checkMsg(msg,true)) return;
 		
 		String key = msg.getDataKey();
-		if(votes_pre.contains(key)){
-			// 说明已经发起过，不能重复发起
-			return;
-		}
+		if(votes_pre.contains(key))	return;
+		
 		votes_pre.add(key);
 		// 启动超时控制
 		timeOuts.put(key, System.currentTimeMillis());
@@ -305,14 +303,14 @@ public class Pbft {
 	
 	private void onReply(PbftMsg msg) {
 		if(curMsg == null || !curMsg.getData().equals(msg.getData()))return;
-//		long count = replyCount.incrementAndGet();
-//		if(count >= maxf+1){
-//			logger.info("消息确认成功[" +index+"]:"+ msg);
+		long count = replyCount.incrementAndGet();
+		if(count >= maxf+1){
+			logger.info("消息确认成功[" +index+"]:"+ msg);
 			replyCount.set(0);
 			curMsg = null; // 当前请求已经完成
 			// 执行相关逻辑
 			doSomething(msg);
-//		}
+		}
 	}
 
 	private void onGetView(PbftMsg msg) {

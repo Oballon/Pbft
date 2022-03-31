@@ -19,8 +19,6 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Queues;
 import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.AtomicLongMap;
-import com.pbft.TimerManager;
-
 
 
 public class HQ implements Comparable<HQ>{
@@ -137,7 +135,7 @@ public class HQ implements Comparable<HQ>{
 	}	
 			
 	/**
-	 * 请求入列
+	 * 产生请求
 	 * @param data
 	 * @throws InterruptedException 
 	 */
@@ -145,11 +143,12 @@ public class HQ implements Comparable<HQ>{
 		HQMsg req = new HQMsg(HQ.HREQ, this.index);		
 		req.setTime(System.currentTimeMillis());	
 		req.setData(data);
+		req.setOnode(index);
 		reqQueue.put(req);
 	}	
 	
 	/**
-	 * 真实的发送请求
+	 * 发送请求
 	 * @return
 	 */
 	protected boolean doReq() {
@@ -157,6 +156,7 @@ public class HQ implements Comparable<HQ>{
 		curMsg = reqQueue.poll();
 		if(curMsg == null)return false;
 		curMsg.setVnum(this.view);
+		curMsg.setTime(System.currentTimeMillis());
 		doSendCurMsg();
 		return true;
 	}
@@ -166,51 +166,39 @@ public class HQ implements Comparable<HQ>{
 		HQMain.send(getPriNode(view), curMsg);
 	}	
 
-	private void doSomething(HQMsg msg) {
-		// 请求被允许，可放心执行
-		//logger.info("请求执行成功[" +index+"]:"+"用时"+msg);
-	}	
-	
 	protected boolean doAction(HQMsg msg) {
 		if(!isRun) return false;
 		if(msg != null){
 			//logger.info("收到消息[" +index+"]:"+ msg);
 			switch (msg.getType()) {
-			//HQPBFT cases
+			//HQPbft cases
 			case HREQ:
 				onHReq(msg);
 				break;
 			case HPP:
-				// HQrepre
-				onBack(msg);
+				onHPre(msg);
 				break;
 			case HBA:
-				// HQpre
-				onConfirm(msg);
+				onHBack(msg);
 				break;
 			case HCON:
-				// HQcommit
 				onHCommit(msg);
 				break;
 			case HCOM:
-				// HQreply
 				onHReply(msg);
 				break;
 				
-			// PBFT cases	
+			// Pbft cases	
 			case REQ:
 				onReq(msg);
 				break;			
 			case PP:
-				// prepre
 				onPrePrepare(msg);
 				break;			
 			case PA:
-				// pre
 				onPrepare(msg);
 				break;			
 			case CM:
-				// commit
 				onCommit(msg);
 				break;				
 			case REPLY:
@@ -232,11 +220,7 @@ public class HQ implements Comparable<HQ>{
 	
 	//第一步 HREQ 主节点广播信息
 	private void onHReq(HQMsg msg) {
-		
-		
-//    	System.out.println(System.currentTimeMillis()-msg.getTime());
-    	
-    	
+
 		if(!msg.isOk()) return;
 		HQMsg sed = new HQMsg(msg);
 		sed.setNode(index);
@@ -270,7 +254,7 @@ public class HQ implements Comparable<HQ>{
 	}
 	
 	//第二步 Back 回复阶段，各个节点向主节点发送回复信息
-	private void onBack(HQMsg msg) {
+	private void onHPre(HQMsg msg) {
 		if(!checkMsg(msg,true)) return;
 		
 		String key = msg.getDataKey();
@@ -301,7 +285,7 @@ public class HQ implements Comparable<HQ>{
 	}	
 	
 	//第三步骤，主节点回复Confirm信息
-	private void onConfirm(HQMsg msg) {
+	private void onHBack(HQMsg msg) {
 		num++;
 		if(!checkMsg(msg,false)) {
 			logger.info("异常消息[" +index+"]:"+msg);
@@ -319,11 +303,7 @@ public class HQ implements Comparable<HQ>{
 		if(num == hqnum) {
 			if(agCou == hqnum){
 				aggre_pare.remove(msg.getDataKey());
-				
-				
-		    	System.out.println(System.currentTimeMillis()-msg.getTime());
-		    	
-		    	
+
 				// 进入提交阶段
 				HQMsg sed = new HQMsg(msg);
 				sed.setType(HCON);
@@ -351,41 +331,27 @@ public class HQ implements Comparable<HQ>{
 		if(msg.getNode() != index){
 			this.genNo.set(msg.getNo());
 		}
-		// 进入回复阶段
-//		if(msg.getOnode() == index){
-//			// 自身则直接回复
-//			onReply(msg);
-//		}else{
-//			HQMsg sed = new HQMsg(msg);
-//			sed.setType(HCOM);
-//			sed.setNode(index);
-//			// 回复客户端
-////			HQMain.send(sed.getOnode(), sed);
-//			doSomething(sed);
-//		}
+
 		HQMsg sed = new HQMsg(msg);
 		sed.setType(HCOM);
 		sed.setNode(index);
 		// 回复客户端
-//		HQMain.send(sed.getOnode(), sed);
-		msg.computCostTime();
-		doSomething(sed);
+		HQMain.send(sed.getOnode(), sed);
 	}
 	
 	//第五步
 	private void onHReply(HQMsg msg) {
-		// 进入回复阶段
-//		if(msg.getOnode() == index){
-//			// 自身则直接回复
-//			onReply(msg);
-//		}else{
-//			HQMsg sed = new HQMsg(msg);
-//			sed.setType(HCOM);
-//			sed.setNode(index);
-//			// 回复客户端
-////			HQMain.send(sed.getOnode(), sed);
-//			doSomething(sed);
-//		}
+		if(curMsg == null || !curMsg.getData().equals(msg.getData()))return;
+		long count = replyCount.incrementAndGet();
+		if(count >= maxf+1){
+			//logger.info("消息确认成功[" +index+"]:"+ msg);
+			replyCount.set(0);
+			curMsg = null; // 当前请求已经完成
+			// 执行相关逻辑					
+			HQMain.collectTimes(msg.computCostTime());
+			//logger.info("请求执行成功[" +index+"]:"+msg);
+			
+		}
 	}
 	
 	
@@ -496,24 +462,22 @@ public class HQ implements Comparable<HQ>{
 				sed.setType(REPLY);
 				sed.setNode(index);
 				// 回复客户端
-//				PbftMain.send(sed.getOnode(), sed);
-				doSomething(sed);
+				HQMain.send(sed.getOnode(), sed);
 			}			
 		}
 	}		
 
 	private void onReply(HQMsg msg) {
 		if(curMsg == null || !curMsg.getData().equals(msg.getData()))return;
-//		long count = replyCount.incrementAndGet();
-//		if(count >= maxf+1){
+		long count = replyCount.incrementAndGet();
+		if(count >= maxf+1){
 //			logger.info("消息确认成功[" +index+"]:"+ msg);
 			replyCount.set(0);
 			curMsg = null; // 当前请求已经完成
 			// 执行相关逻辑	
-			msg.computCostTime();
-			doSomething(msg);
+			HQMain.collectTimes(msg.computCostTime());
 			
-//		}
+		}
 	}
 	
 	public boolean checkMsg(HQMsg msg,boolean isPre){
@@ -541,7 +505,6 @@ public class HQ implements Comparable<HQ>{
 			}
 		}
 		remo.forEach((data)->{
-			logger.info("请求主节点超时["+index+"]:"+data);
 			timeOutsReq.remove(data);
 			if(curMsg != null && curMsg.getData().equals(data)){
 				// 作为客户端发起节点
@@ -559,8 +522,8 @@ public class HQ implements Comparable<HQ>{
 		});		
 	}
 		
-	public int getPriNode(int view2){
-		return view2%size;
+	public int getPriNode(int view){
+		return view%size;
 	}
 	
 	public void push(HQMsg msg){

@@ -57,8 +57,9 @@ public class HQMsg {
 		this.time = time;
 	}
 	
-	public void computCostTime() {
+	public long computCostTime() {
 		this.costTime = System.currentTimeMillis() - this.time;
+		return this.costTime;
 	}
 
 	public int getVnum() {

@@ -13,6 +13,8 @@ import java.util.Random;
 import javax.swing.SwingUtilities;
 import javax.swing.WindowConstants;
 
+import com.chart.LineChart;
+import com.timemanager.*;
   
 
 public class PbftMain {
@@ -51,13 +53,14 @@ public class PbftMain {
 		}
 		
 		//全网节点随机产生请求
-		for(int i=0;i<5;i++){
+		for(int i=0;i<20;i++){
 			int node = r.nextInt(SIZE);
 			nodes.get(node).req("test"+i);
 		}
 
 		Thread.sleep(3000);
 
+		//绘制图表
     	LineChart example = new LineChart(costTimes);
 	    SwingUtilities.invokeLater(() -> {    
 			example.setAlwaysOnTop(false);  
@@ -66,8 +69,11 @@ public class PbftMain {
 			example.setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);  
 			example.setVisible(true);  
 	    });  
+
+	    
+//		Thread.sleep(5000);    		
 //
-//		Thread.sleep(5000);     
+//		logger.info("Thread count:" + Thread.activeCount());
 //		
 //		example.changeDataset(cost());
 		

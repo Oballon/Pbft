@@ -1,21 +1,28 @@
 package com.HQ;
 
 import java.util.List;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Random;
+
+import javax.swing.SwingUtilities;
+import javax.swing.WindowConstants;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
+import org.apache.commons.lang3.RandomUtils;
 import org.jfree.chart.*;
 
+import com.chart.LineChart;
 import com.google.common.collect.Lists;
-import com.pbft.TimerManager;
+import com.timemanager.*;
 
 public class HQMain {
 	
 	static Logger logger = LoggerFactory.getLogger(HQMain.class);
 	
 	public static final int SIZE =10;	
+	public static final int LIMITE_SIZE = 100;
 	public static final int CREDIT_LEVEL = 3;
 	public static final int MIN_CONSENSUS_NUM = 5;  //最小共识节点数
 	public static final int MAX_CONSENSUS_NUM = SIZE/2;  //最大共识节点数
@@ -25,36 +32,63 @@ public class HQMain {
 	private static List<HQ> consensusNodes = Lists.newArrayList(); 
 	private static List<HQ> candidateNodes = Lists.newArrayList(); 
 	
-	private static Random r = new Random();
+	private static Random r = new Random();	
 	
-	private static long[] net = new long[9999];
+	private static long[][] delayNet = new long[LIMITE_SIZE][LIMITE_SIZE];	
+	
+	private static List<Long> costTimes = new ArrayList<>(); 
+
 	
 	public static void main(String[] args) throws InterruptedException {
 		
-		for(int i=0;i<SIZE;i++){
-			nodes.add(new HQ(i,SIZE,false,true));
-		}
-
-		start();			
-
-		//nodes.get(1).setByzt();
-		// 初始化模拟网络
+		//初始化网络延迟
 		for(int i=0;i<SIZE;i++){
 			for(int j=0;j<SIZE;j++){
 				if(i != j){
 					// 随机延时
-					net[i*10+j] = 10;
+					delayNet[i][j] = RandomUtils.nextLong(10, 60);
 				}else{
-					net[i*10+j] = 5;
+					delayNet[i][j] = 10;
 				}
 			}
-		}		
+		}	  
 		
-		// 模拟请求端发送请求
+		//创建网络节点
+		for(int i=0;i<SIZE;i++){
+			nodes.add(new HQ(i,SIZE,false,true));
+		}
+		
+		classifyNodes(CREDIT_LEVEL,MAX_CONSENSUS_NUM);	
+		
+		//多线程启动网络共识节点
+		if (consensusNodes.size() < MIN_CONSENSUS_NUM) {
+			System.out.println("Unenough creditable nodes, there are less than "
+					+ MIN_CONSENSUS_NUM + "creditable nodes!");
+		}else {		
+			for(int i=0;i<consensusNodes.size();i++) {
+				consensusNodes.get(i).start();
+			}	
+		}
+		
+		//全网节点随机产生请求
 		for(int i=0;i<1;i++){
 			int node = r.nextInt(SIZE);
 			nodes.get(node).req("test"+i);
 		}
+		
+		Thread.sleep(3000);
+		
+		//绘制图表
+    	LineChart example = new LineChart(costTimes);
+	    SwingUtilities.invokeLater(() -> {    
+			example.setAlwaysOnTop(false);  
+			example.pack();  
+			example.setSize(600, 400);  
+			example.setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);  
+			example.setVisible(true);  
+	    });  
+
+//		nodes.get(1).setByzt();
 		
 //		Thread.sleep(10000);
 //		System.out.println("9--------------------------------------------------------");
@@ -85,24 +119,7 @@ public class HQMain {
 				candidateNodes.add(nodes.get(i));
 			}
 		}
-	}	
-
-	
-	public static void start() {
-
-		classifyNodes(CREDIT_LEVEL,MAX_CONSENSUS_NUM);		
-
-		if (consensusNodes.size() < MIN_CONSENSUS_NUM) {
-			System.out.println("Unenough creditable nodes, there are less than "
-					+ MIN_CONSENSUS_NUM + "creditable nodes!");
-		}else {		
-			for(int i=0;i<consensusNodes.size();i++) {
-				consensusNodes.get(i).start();
-			}	
-		}
-		return;
-	}
-		
+	}			
 	
 	public static void Bstart() {
 		for(int i=0;i<candidateNodes.size();i++) {
@@ -122,10 +139,11 @@ public class HQMain {
 			TimerManager.schedule(()->{
 				hq.push(new HQMsg(msg));
 				return null;
-			}, net[msg.getNode()*10+hq.getIndex()]);
+			}, delayNet[msg.getNode()][hq.getIndex()]);
 		}
 	}
 
+	
 	/**
 	 * 向所有节点广播消息
 	 * @param msg
@@ -137,7 +155,7 @@ public class HQMain {
 			TimerManager.schedule(()->{
 				hq.push(new HQMsg(msg));
 				return null;
-			}, net[msg.getNode()*10+hq.getIndex()]);
+			}, delayNet[msg.getNode()][hq.getIndex()]);
 		}
 	}
 	
@@ -151,8 +169,12 @@ public class HQMain {
 		TimerManager.schedule(()->{
 			nodes.get(toIndex).push(msg);
 			return null;
-		}, net[msg.getNode()*10+toIndex]);
+		}, delayNet[msg.getNode()][toIndex]);
 	}	
 
+	public static void collectTimes(long costTime) {
+		costTimes.add(costTime);
+		System.out.println(costTime);
+	}	
 
 }

@@ -1,4 +1,4 @@
-package com.test;
+package com.chart;
 
 import javax.swing.JFrame;  
 import javax.swing.SwingUtilities;

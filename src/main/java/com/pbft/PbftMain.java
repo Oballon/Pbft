@@ -59,7 +59,12 @@ public class PbftMain {
 		}
 
 		Thread.sleep(3000);
-
+		
+		
+		//console按编号输出
+		for(int i=0;i<costTimes.size();i++) {			
+			System.out.println(i + ": " + costTimes.get(i));
+		}
 		//绘制图表
     	LineChart example = new LineChart(costTimes);
 	    SwingUtilities.invokeLater(() -> {    
@@ -124,7 +129,6 @@ public class PbftMain {
 	
 	public static void collectTimes(long costTime) {
 		costTimes.add(costTime);
-		System.out.println(costTime);
 	}	
 
     public static List<Long> costTest(){

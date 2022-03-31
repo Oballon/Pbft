@@ -33,7 +33,7 @@ public class Pbft {
 	private int index; // 节点标识
 	
 	private int view; // 视图view
-	private volatile boolean viewOk; // 视图状态
+	private volatile boolean viewOk = false; // 视图状态
 	private volatile boolean isRun = false;
 
 	// 消息队列
@@ -67,7 +67,7 @@ public class Pbft {
 	// 请求队列
 	private BlockingQueue<PbftMsg> reqQueue = Queues.newLinkedBlockingDeque(100);
 	// 当前请求
-	private PbftMsg curMsg;
+	private PbftMsg curReq;
 	
 	private volatile AtomicInteger genNo = new AtomicInteger(0); // 序列号生成
 	
@@ -122,33 +122,33 @@ public class Pbft {
 	 */
 	public void req(String data) throws InterruptedException{
 		PbftMsg req = new PbftMsg(Pbft.REQ, this.index);
-		req.setTime(System.currentTimeMillis());
 		req.setData(data);
 		req.setOnode(index);
 		reqQueue.put(req);		
 	}
 	
 	/**
-	 * 发出请求
+	 * 取出并标记请求
 	 * @return
 	 */
 	protected boolean doReq() {
-		if(!viewOk || curMsg != null)return false; // 上一个请求还没发完/视图初始化中
-		curMsg = reqQueue.poll();
-		if(curMsg == null)return false;
-		curMsg.setVnum(this.view);
-		curMsg.setTime(System.currentTimeMillis());
-		doSendCurMsg();
+		if(!viewOk || curReq != null)return false; // 上一个请求还没发完/视图初始化中
+		curReq = reqQueue.poll();
+		if(curReq == null)return false;
+		curReq.setVnum(this.view);
+		curReq.setTime(System.currentTimeMillis());
+		doSendCurReq();
 		return true;
 	}	
 	
-	void doSendCurMsg(){
-		timeOutsReq.put(curMsg.getData(), System.currentTimeMillis());
-		PbftMain.send(getPriNode(view), curMsg);
+	//发出请求
+	void doSendCurReq(){
+		timeOutsReq.put(curReq.getData(), System.currentTimeMillis());
+		PbftMain.send(getPriNode(view), curReq);
 	}
 	
 	protected boolean doAction(PbftMsg msg) {
-		//logger.info("doaction");
+		//logger.info("do action");
 		if(!isRun) return false;
 		if(msg != null){
 			//logger.info("收到消息[" +index+"]:"+ msg);
@@ -192,12 +192,11 @@ public class Pbft {
 			applyReq.put(msg.getDataKey(), msg);
 			// 主节点收到C的请求后进行广播
 			sed.setType(PP);
-//			sed.setVnum(view);
 			// 主节点生成序列号
 			int no = genNo.incrementAndGet();
 			sed.setNo(no);
 			PbftMain.publish(sed);
-		}else if(msg.getNode() != index){ // 自身忽略
+		}else if(msg.getNode() != index){
 			// 非主节点收到，说明可能主节点宕机
 			if(doneReq.containsKey(msg.getDataKey())){
 				// 已经处理过，直接回复
@@ -241,10 +240,7 @@ public class Pbft {
 		}
 		
 		String key = msg.getKey();
-		if(votes_pare.contains(key) && !votes_pre.contains(msg.getDataKey())){
-			// 说明已经投过票，不能重复投
-			return;
-		}
+		if(votes_pare.contains(key) && !votes_pre.contains(msg.getDataKey())) return;
 
 		votes_pare.add(key);
 		
@@ -291,12 +287,12 @@ public class Pbft {
 	}
 	
 	private void onReply(PbftMsg msg) {
-		if(curMsg == null || !curMsg.getData().equals(msg.getData()))return;
+		if(curReq == null || !curReq.getData().equals(msg.getData()))return;
 		long count = replyCount.incrementAndGet();
 		if(count >= maxf+1){
 			//logger.info("消息确认成功[" +index+"]:"+ msg);
 			replyCount.set(0);
-			curMsg = null; // 当前请求已经完成
+			curReq = null; // 当前请求已经完成
 			// 执行相关逻辑					
 			PbftMain.collectTimes(msg.computCostTime());
 			//logger.info("请求执行成功[" +index+"]:"+msg);
@@ -340,10 +336,10 @@ public class Pbft {
 			viewOk = true;
 			//logger.info("视图变更完成["+index+"]："+ view);
 			// 可以继续发请求
-			if(curMsg != null){
-				curMsg.setVnum(this.view);
-				//logger.info("请求重传["+index+"]："+ curMsg);
-				doSendCurMsg();
+			if(curReq != null){
+				curReq.setVnum(this.view);
+				//logger.info("请求重传["+index+"]："+ curReq);
+				doSendCurReq();
 			}
 		}
 	}
@@ -380,11 +376,11 @@ public class Pbft {
 		remo.forEach((data)->{
 			//logger.info("请求主节点超时["+index+"]:"+data);
 			timeOutsReq.remove(data);
-			if(curMsg != null && curMsg.getData().equals(data)){
+			if(curReq != null && curReq.getData().equals(data)){
 				// 作为客户端发起节点
 				vnumAggreCount.incrementAndGet(this.view+1);
 				votes_vnum.add(index+"@"+(this.view+1));
-				PbftMain.publish(curMsg);
+				PbftMain.publish(curReq);
 			}else{
 				if(!this.viewOk) return; // 已经开始选举视图，不用重复发起
 				this.viewOk = false;

@@ -9,7 +9,7 @@ public class HQMsg {
 	private int onode; // 发起请求的节点
 	private int vnum; // 视图编号
 	private int no; // 序列号
-	private long time = 0; // 时间戳
+	private long time = 0; // 时间戳，发出请求之前标记
 	private long costTime;
 	private String data; // 数据,表示数据的hash,必须唯一
 	

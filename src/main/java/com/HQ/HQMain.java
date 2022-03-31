@@ -11,7 +11,6 @@ import javax.swing.WindowConstants;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.commons.lang3.RandomUtils;
-import org.jfree.chart.*;
 
 import com.chart.LineChart;
 import com.google.common.collect.Lists;
@@ -21,11 +20,10 @@ public class HQMain {
 	
 	static Logger logger = LoggerFactory.getLogger(HQMain.class);
 	
-	public static final int SIZE =10;	
-	public static final int LIMITE_SIZE = 100;
-	public static final int CREDIT_LEVEL = 3;
-	public static final int MIN_CONSENSUS_NUM = 5;  //最小共识节点数
-	public static final int MAX_CONSENSUS_NUM = SIZE/2;  //最大共识节点数
+	public static final int SIZE =100;	
+	public static final int CREDIT_LEVEL = 60;	//总分：100
+	public static final int MIN_CONSENSUS_NUM = 4;  //最小共识节点数
+	public static final int MAX_CONSENSUS_NUM = 20;  //最大共识节点数
 	
 	private static List<HQ> nodes = Lists.newArrayList();
 	
@@ -34,7 +32,7 @@ public class HQMain {
 	
 	private static Random r = new Random();	
 	
-	private static long[][] delayNet = new long[LIMITE_SIZE][LIMITE_SIZE];	
+	private static long[][] delayNet = new long[SIZE][SIZE];	
 	
 	private static List<Long> costTimes = new ArrayList<>(); 
 
@@ -59,6 +57,7 @@ public class HQMain {
 		}
 		
 		classifyNodes(CREDIT_LEVEL,MAX_CONSENSUS_NUM);	
+		HQ.setHQSize(consensusNodes.size());
 		
 		//多线程启动网络共识节点
 		if (consensusNodes.size() < MIN_CONSENSUS_NUM) {
@@ -71,13 +70,19 @@ public class HQMain {
 		}
 		
 		//全网节点随机产生请求
-		for(int i=0;i<1;i++){
+		for(int i=0;i<10;i++){
 			int node = r.nextInt(SIZE);
 			nodes.get(node).req("test"+i);
 		}
 		
-		Thread.sleep(3000);
 		
+		
+		Thread.sleep(5000);
+		
+		//console按编号输出
+		for(int i=0;i<costTimes.size();i++) {			
+			System.out.println(i + ": " + costTimes.get(i));
+		}
 		//绘制图表
     	LineChart example = new LineChart(costTimes);
 	    SwingUtilities.invokeLater(() -> {    
@@ -88,28 +93,14 @@ public class HQMain {
 			example.setVisible(true);  
 	    });  
 
-//		nodes.get(1).setByzt();
-		
-//		Thread.sleep(10000);
-//		System.out.println("9--------------------------------------------------------");
-//		// 1秒后，主节点宕机
-//		nodes.get(0).close();
-//		for(int i=2;i<4;i++){
-//			nodes.get(i).req("testD"+i);
-//		}
-//		//1秒后恢复
-//		Thread.sleep(1000);
-//		System.out.println("9--------------------------------------------------------");
-//
-//		nodes.get(0).back();
-//		for(int i=1;i<2;i++){
-//			nodes.get(i).req("testB"+i);
-//		}		
+
+	    
 	}
 	
 	
+	//取满足可信度水平且不超过最大共识节点数的所有节点
 	public static void classifyNodes(int creditLevel, int maxQuantity) {
-		Collections.reverse(nodes);
+//		Collections.reverse(nodes);   //集合降序排列----暂时不用
 		for(int i=0;i<SIZE;i++) {
 			int num = 0;
 			if(nodes.get(i).getCredit() > creditLevel && num < maxQuantity) {
@@ -172,9 +163,9 @@ public class HQMain {
 		}, delayNet[msg.getNode()][toIndex]);
 	}	
 
+	//收集Request处理时长
 	public static void collectTimes(long costTime) {
 		costTimes.add(costTime);
-		System.out.println(costTime);
 	}	
 
 }

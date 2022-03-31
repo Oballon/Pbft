@@ -19,6 +19,8 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Queues;
 import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.AtomicLongMap;
+import com.pbft.PbftMain;
+import com.pbft.PbftMsg;
 
 
 public class HQ implements Comparable<HQ>{
@@ -40,13 +42,14 @@ public class HQ implements Comparable<HQ>{
 	public static final int HCOM = 9; // 回复		
 	
 	public int size; // 总节点数
+	public static int HQSize; //共识节点数
 	public int maxf; // 最大失效节点
 	private int index; // 节点标识
 	
 	private int view; // 视图view
-	private volatile boolean viewOk; // 视图状态
-	
+	private volatile boolean viewOk = false; // 视图状态	
 	private volatile boolean isRun = false;	
+	
 	private volatile int num = 0;	
 	private volatile boolean isByzt;
 	private volatile boolean isHQ;
@@ -65,9 +68,9 @@ public class HQ implements Comparable<HQ>{
 	private Set<String> votes_comm = Sets.newConcurrentHashSet();
 	private AtomicLongMap<String> aggre_comm = AtomicLongMap.create();
 	// 成功处理过的请求
-	private Map<String,HQMsg> doneMsg = Maps.newConcurrentMap();
+	private Map<String,HQMsg> doneReq = Maps.newConcurrentMap();
 	// 作为主节点受理过的请求
-	private Map<String,HQMsg> applyMsg = Maps.newConcurrentMap();
+	private Map<String,HQMsg> applyReq = Maps.newConcurrentMap();
 	
 	// 视图初始化 投票情况
 	private AtomicLongMap<Integer> vnumAggreCount = AtomicLongMap.create();
@@ -84,7 +87,7 @@ public class HQ implements Comparable<HQ>{
 	// 请求队列
 	private BlockingQueue<HQMsg> reqQueue = Queues.newLinkedBlockingDeque(100);
 	// 当前请求
-	private HQMsg curMsg;
+	private HQMsg curReq;
 	
 	private volatile AtomicInteger genNo = new AtomicInteger(0); // 序列号生成
 	
@@ -141,29 +144,29 @@ public class HQ implements Comparable<HQ>{
 	 */
 	public void req(String data) throws InterruptedException{
 		HQMsg req = new HQMsg(HQ.HREQ, this.index);		
-		req.setTime(System.currentTimeMillis());	
 		req.setData(data);
 		req.setOnode(index);
 		reqQueue.put(req);
 	}	
 	
 	/**
-	 * 发送请求
+	 * 取出并标记请求
 	 * @return
 	 */
 	protected boolean doReq() {
-		if(!viewOk || curMsg != null)return false; // 上一个请求还没发完/视图初始化中
-		curMsg = reqQueue.poll();
-		if(curMsg == null)return false;
-		curMsg.setVnum(this.view);
-		curMsg.setTime(System.currentTimeMillis());
-		doSendCurMsg();
+		if(!viewOk || curReq != null)return false; // 上一个请求还没发完/视图初始化中
+		curReq = reqQueue.poll();
+		if(curReq == null)return false;
+		curReq.setVnum(this.view);
+		curReq.setTime(System.currentTimeMillis());
+		doSendCurReq();
 		return true;
 	}
 	
-	void doSendCurMsg(){
-		timeOutsReq.put(curMsg.getData(), System.currentTimeMillis());
-		HQMain.send(getPriNode(view), curMsg);
+	//发出请求
+	void doSendCurReq(){
+		timeOutsReq.put(curReq.getData(), System.currentTimeMillis());
+		HQMain.send(getPriNode(view), curReq);
 	}	
 
 	protected boolean doAction(HQMsg msg) {
@@ -226,18 +229,17 @@ public class HQ implements Comparable<HQ>{
 		sed.setNode(index);
 		if(msg.getVnum() < view) return;
 		if(msg.getVnum() == index){
-			if(applyMsg.containsKey(msg.getDataKey())) return; // 已经受理过
-			applyMsg.put(msg.getDataKey(), msg);
+			if(applyReq.containsKey(msg.getDataKey())) return; // 已经受理过
+			applyReq.put(msg.getDataKey(), msg);
 			// 主节点收到C的请求后进行广播
 			sed.setType(HPP);
-//			sed.setVnum(view);
 			// 主节点生成序列号
 			int no = genNo.incrementAndGet();
 			sed.setNo(no);
 			HQMain.HQpublish(sed);
 		}else if(msg.getNode() != index){ // 自身忽略
 			// 非主节点收到，说明可能主节点宕机
-			if(doneMsg.containsKey(msg.getDataKey())){				
+			if(doneReq.containsKey(msg.getDataKey())){				
 				// 已经处理过，直接回复
 				sed.setType(REPLY);
 				HQMain.send(msg.getNode(), sed);
@@ -258,67 +260,42 @@ public class HQ implements Comparable<HQ>{
 		if(!checkMsg(msg,true)) return;
 		
 		String key = msg.getDataKey();
-		if(votes_pre.contains(key)){
-			// 说明已经发起过，不能重复发起
-			return;
-		}
+		if(votes_pre.contains(key))	return;
+
 		votes_pre.add(key);
 		// 启动超时控制
 		timeOuts.put(key, System.currentTimeMillis());
 		// 移除请求超时，假如有请求的话
 		timeOutsReq.remove(msg.getData());
-		// 进入准备阶段		
-		if(isByzt) {
-			credit = credit/2; 
-			String message = msg.getData()+"100";
-			msg.setData(message);
-			HQMsg sed = new HQMsg(msg);
-			sed.setType(HBA);
-			sed.setNode(index);
-			HQMain.send(getPriNode(view), sed);			
-		}else {
-			HQMsg sed = new HQMsg(msg);
-			sed.setType(HBA);
-			sed.setNode(index);
-			HQMain.send(getPriNode(view), sed);			
-		}	
+		// 进入准备阶段
+		HQMsg sed = new HQMsg(msg);
+		sed.setType(HBA);
+		sed.setNode(index);
+		HQMain.send(getPriNode(view), sed);	
 	}	
 	
 	//第三步骤，主节点回复Confirm信息
 	private void onHBack(HQMsg msg) {
-		num++;
 		if(!checkMsg(msg,false)) {
-			logger.info("异常消息[" +index+"]:"+msg);
+//			logger.info("异常消息[" +index+"]:"+msg);
 			return;
 		}
 		
 		String key = msg.getKey();
-		if(votes_pare.contains(key) && !votes_pre.contains(msg.getDataKey())){
-			return;
-		}
+		if(votes_pare.contains(key) && !votes_pre.contains(msg.getDataKey()))return;
 		votes_pare.add(key);		
 		// 票数 +1
 		long agCou = aggre_pare.incrementAndGet(msg.getDataKey());
-		int hqnum = size - (size-1)/3;
-		if(num == hqnum) {
-			if(agCou == hqnum){
+			if(agCou == HQSize){
 				aggre_pare.remove(msg.getDataKey());
-
 				// 进入提交阶段
 				HQMsg sed = new HQMsg(msg);
 				sed.setType(HCON);
 				sed.setNode(index);
-				doneMsg.put(sed.getDataKey(), sed);
+				doneReq.put(sed.getDataKey(), sed);
 				HQMain.HQpublish(sed);				
-			}else {
-				num =0;
-				System.out.println("-----------------------存在拜占庭节点----------------------");
-				HQMain.Bstart();
-				HQMsg sed = new HQMsg(msg);
-				sed.setType(REQ);
-				push(sed);
-			}			
-		}		
+			}
+		
 		// 后续的票数肯定凑不满，超时自动清除			
 	}
 		
@@ -331,7 +308,7 @@ public class HQ implements Comparable<HQ>{
 		if(msg.getNode() != index){
 			this.genNo.set(msg.getNo());
 		}
-
+	
 		HQMsg sed = new HQMsg(msg);
 		sed.setType(HCOM);
 		sed.setNode(index);
@@ -341,15 +318,15 @@ public class HQ implements Comparable<HQ>{
 	
 	//第五步
 	private void onHReply(HQMsg msg) {
-		if(curMsg == null || !curMsg.getData().equals(msg.getData()))return;
+
+		if(curReq == null || !curReq.getData().equals(msg.getData()))return;
 		long count = replyCount.incrementAndGet();
 		if(count >= maxf+1){
-			//logger.info("消息确认成功[" +index+"]:"+ msg);
 			replyCount.set(0);
-			curMsg = null; // 当前请求已经完成
+			curReq = null; // 当前请求已经完成
 			// 执行相关逻辑					
 			HQMain.collectTimes(msg.computCostTime());
-			//logger.info("请求执行成功[" +index+"]:"+msg);
+			logger.info("请求执行成功[" +index+"]:"+ "------SPbft方法------");
 			
 		}
 	}
@@ -362,18 +339,18 @@ public class HQ implements Comparable<HQ>{
 		sed.setNode(index);
 		if(msg.getVnum() < view) return;
 		if(msg.getVnum() == index){
-			if(applyMsg.containsKey(msg.getDataKey())) return; // 已经受理过
-			applyMsg.put(msg.getDataKey(), msg);
+			if(applyReq.containsKey(msg.getDataKey())) return; // 已经受理过
+			applyReq.put(msg.getDataKey(), msg);
 			// 主节点收到C的请求后进行广播
 			sed.setType(PP);
-//			sed.setVnum(view);
+			sed.setVnum(view);
 			// 主节点生成序列号
 			int no = genNo.incrementAndGet();
 			sed.setNo(no);
 			HQMain.publish(sed);
 		}else if(msg.getNode() != index){ // 自身忽略
 			// 非主节点收到，说明可能主节点宕机
-			if(doneMsg.containsKey(msg.getDataKey())){
+			if(doneReq.containsKey(msg.getDataKey())){
 				// 已经处理过，直接回复
 				sed.setType(REPLY);
 				HQMain.send(msg.getNode(), sed);
@@ -415,9 +392,8 @@ public class HQ implements Comparable<HQ>{
 			return;
 		}		
 		String key = msg.getKey();
-		if(votes_pare.contains(key) && !votes_pre.contains(msg.getDataKey())){
-			return;
-		}
+		if(votes_pare.contains(key) && !votes_pre.contains(msg.getDataKey())) return;
+		
 		votes_pare.add(key);		
 		// 票数 +1
 		long agCou = aggre_pare.incrementAndGet(msg.getDataKey());
@@ -427,7 +403,7 @@ public class HQ implements Comparable<HQ>{
 			HQMsg sed = new HQMsg(msg);
 			sed.setType(CM);
 			sed.setNode(index);
-			doneMsg.put(sed.getDataKey(), sed);
+			doneReq.put(sed.getDataKey(), sed);
 			HQMain.publish(sed);
 		}
 		// 后续的票数肯定凑不满，超时自动清除			
@@ -437,10 +413,8 @@ public class HQ implements Comparable<HQ>{
 		if(!checkMsg(msg,false)) return;
 		// data模拟数据摘要
 		String key = msg.getKey();
-		if(votes_comm.contains(key) && !votes_pare.contains(key)){
-			// 说明该节点对该项数据已经投过票，不能重复投
-			return;
-		}		
+		if(votes_comm.contains(key) && !votes_pare.contains(key)) return;
+		
 		votes_comm.add(key);
 		// 票数 +1
 		long agCou = aggre_comm.incrementAndGet(msg.getDataKey());
@@ -468,15 +442,15 @@ public class HQ implements Comparable<HQ>{
 	}		
 
 	private void onReply(HQMsg msg) {
-		if(curMsg == null || !curMsg.getData().equals(msg.getData()))return;
+		if(curReq == null || !curReq.getData().equals(msg.getData()))return;
 		long count = replyCount.incrementAndGet();
 		if(count >= maxf+1){
-//			logger.info("消息确认成功[" +index+"]:"+ msg);
 			replyCount.set(0);
-			curMsg = null; // 当前请求已经完成
+			curReq = null; // 当前请求已经完成
 			// 执行相关逻辑	
-			HQMain.collectTimes(msg.computCostTime());
-			
+//			HQMain.collectTimes(msg.computCostTime());
+			logger.info("请求执行成功[" +index+"]:"+ "------Pbft方法------");
+
 		}
 	}
 	
@@ -488,11 +462,39 @@ public class HQ implements Comparable<HQ>{
 	}	
 
 	/**
-	 * 检测超时情况
+	 * 检测HQPbft超时情况
 	 */
 	private void checkHTimer() {
 		List<String> remo = Lists.newArrayList();
-		
+	
+		for(Entry<String, Long> item : timeOutsReq.entrySet()){
+			if(System.currentTimeMillis() - item.getValue() > 1000){
+				// 请求超时
+				logger.info("超时");
+				remo.add(item.getKey());
+			}
+		}
+		remo.forEach((data)->{
+			timeOutsReq.remove(data);
+//			HQMain.Bstart();
+//			HQMsg sed = new HQMsg(msg);
+//			sed.setType(REQ);
+//			push(sed);
+		});		
+	}
+	
+	/**
+	 * 检测Pbft超时情况
+	 */
+	private void checkTimer() {
+		List<String> remo = Lists.newArrayList();
+		for(Entry<String, Long> item : timeOuts.entrySet()){
+			if(System.currentTimeMillis() - item.getValue() > 1000){
+				// 超时还没达成一致，则本次投票无效
+				//logger.info("投票无效["+index+"]:"+ item.getKey());
+				remo.add(item.getKey());
+			}
+		}
 		remo.forEach((it)->{
 			remove(it);
 		});
@@ -505,12 +507,13 @@ public class HQ implements Comparable<HQ>{
 			}
 		}
 		remo.forEach((data)->{
+			//logger.info("请求主节点超时["+index+"]:"+data);
 			timeOutsReq.remove(data);
-			if(curMsg != null && curMsg.getData().equals(data)){
+			if(curReq != null && curReq.getData().equals(data)){
 				// 作为客户端发起节点
 				vnumAggreCount.incrementAndGet(this.view+1);
 				votes_vnum.add(index+"@"+(this.view+1));
-				HQMain.publish(curMsg);
+				HQMain.publish(curReq);
 			}else{
 				if(!this.viewOk) return; // 已经开始选举视图，不用重复发起
 				this.viewOk = false;
@@ -521,7 +524,8 @@ public class HQ implements Comparable<HQ>{
 			}			
 		});		
 	}
-		
+	
+	
 	public int getPriNode(int view){
 		return view%size;
 	}
@@ -537,9 +541,7 @@ public class HQ implements Comparable<HQ>{
 	private void onChangeView(HQMsg msg) {
 		// 收集视图变更
 		String vkey = msg.getNode()+"@"+msg.getVnum();
-		if(votes_vnum.contains(vkey)){
-			return;
-		}
+		if(votes_vnum.contains(vkey)) return;
 		votes_vnum.add(vkey);
 		long count = vnumAggreCount.incrementAndGet(msg.getVnum());
 		if(count >= 2*maxf+1){
@@ -547,11 +549,11 @@ public class HQ implements Comparable<HQ>{
 			this.view = msg.getVnum();
 			viewOk = true;
 			logger.info("视图变更完成["+index+"]："+ view);
-			// 可以继续发请求
-			if(curMsg != null){
-				curMsg.setVnum(this.view);
-				logger.info("请求重传["+index+"]："+ curMsg);
-				doSendCurMsg();
+			// 重新发送请求
+			if(curReq != null){
+				curReq.setVnum(this.view);
+				logger.info("请求重传["+index+"]："+ curReq);
+				doSendCurReq();
 			}
 		}
 	}
@@ -593,8 +595,12 @@ public class HQ implements Comparable<HQ>{
 	public void setView(int view) {
 		this.view = view;
 	}	
+	
+	public static void setHQSize(int Size) {
+		HQSize = Size;
+	}
 
-	// 清理请求相关状态
+	// 清理相关状态
 	private void remove(String it) {
 		votes_pre.remove(it);
 		votes_pare.removeIf((vp)->{

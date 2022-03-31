@@ -28,7 +28,7 @@ public class LineChart extends JFrame {
 	    // Create chart  
 	    JFreeChart chart = ChartFactory.createLineChart(  
 	        "Network Delay", // Chart title  
-	        "Nodes", // X-Axis Label  
+	        "Requests", // X-Axis Label  
 	        "Delay/ms", // Y-Axis Label  
 	        dataset  
 	        );  

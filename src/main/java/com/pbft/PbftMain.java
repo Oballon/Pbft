@@ -23,6 +23,8 @@ public class PbftMain {
 	
 	public static final int SIZE = 4;	
 	public static final int LIMITE_SIZE = 100;
+	public static final int REQUEST_NUM = 10;
+
 	
 	private static long[][] delayNet = new long[LIMITE_SIZE][LIMITE_SIZE];	
 	
@@ -53,7 +55,7 @@ public class PbftMain {
 		}
 		
 		//全网节点随机产生请求
-		for(int i=0;i<20;i++){
+		for(int i=0;i<REQUEST_NUM;i++){
 			int node = r.nextInt(SIZE);
 			nodes.get(node).req("test"+i);
 		}
@@ -61,10 +63,18 @@ public class PbftMain {
 		Thread.sleep(3000);
 		
 		
-		//console按编号输出
+		//console按编号输出执行时间
+		System.out.println("请求运行时长：");
 		for(int i=0;i<costTimes.size();i++) {			
-			System.out.println(i + ": " + costTimes.get(i));
+			System.out.println(costTimes.get(i));
 		}
+		//平均执行时间
+		long total = 0;
+		for(int i=0;i<costTimes.size();i++) {	
+			total += costTimes.get(i);
+		}
+		System.out.println("平均执行时间：" + total/costTimes.size());
+		
 		//绘制图表
     	LineChart example = new LineChart(costTimes);
 	    SwingUtilities.invokeLater(() -> {    
@@ -76,27 +86,7 @@ public class PbftMain {
 	    });  
 
 	    
-//		Thread.sleep(5000);    		
-//
-//		logger.info("Thread count:" + Thread.activeCount());
-//		
-//		example.changeDataset(cost());
-		
-//		Thread.sleep(10000);
-//		System.out.println("9--------------------------------------------------------");
-//		// 1秒后，主节点宕机
-//		nodes.get(0).close();
-//		for(int i=2;i<4;i++){
-//			nodes.get(i).req("testD"+i);
-//		}
-//		//1秒后恢复
-//		Thread.sleep(1000);
-//		System.out.println("9--------------------------------------------------------");
-//
-//		nodes.get(0).back();
-//		for(int i=1;i<2;i++){
-//			nodes.get(i).req("testB"+i);
-//		}		
+	
 	}
 
 	/**

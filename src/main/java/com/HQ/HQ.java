@@ -295,8 +295,8 @@ public class HQ implements Comparable<HQ>{
 				doneReq.put(sed.getDataKey(), sed);
 				HQMain.HQpublish(sed);				
 			}
+			//待完善，主节点未得到所有投票情况，用超时机制处理
 		
-		// 后续的票数肯定凑不满，超时自动清除			
 	}
 		
 	//第四步
@@ -326,7 +326,7 @@ public class HQ implements Comparable<HQ>{
 			curReq = null; // 当前请求已经完成
 			// 执行相关逻辑					
 			HQMain.collectTimes(msg.computCostTime());
-			logger.info("请求执行成功[" +index+"]:"+ "------SPbft方法------");
+//			logger.info("请求执行成功[" +index+"]:"+ "------SPbft方法------");
 			
 		}
 	}

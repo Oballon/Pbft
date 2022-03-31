@@ -24,6 +24,7 @@ public class HQMain {
 	public static final int CREDIT_LEVEL = 60;	//总分：100
 	public static final int MIN_CONSENSUS_NUM = 4;  //最小共识节点数
 	public static final int MAX_CONSENSUS_NUM = 20;  //最大共识节点数
+	public static final int REQUEST_NUM = 10;
 	
 	private static List<HQ> nodes = Lists.newArrayList();
 	
@@ -56,6 +57,7 @@ public class HQMain {
 			nodes.add(new HQ(i,SIZE,false,true));
 		}
 		
+		//共识节点,候选节点分类 并传入HQ类静态变量
 		classifyNodes(CREDIT_LEVEL,MAX_CONSENSUS_NUM);	
 		HQ.setHQSize(consensusNodes.size());
 		
@@ -70,7 +72,7 @@ public class HQMain {
 		}
 		
 		//全网节点随机产生请求
-		for(int i=0;i<10;i++){
+		for(int i=0;i<REQUEST_NUM;i++){
 			int node = r.nextInt(SIZE);
 			nodes.get(node).req("test"+i);
 		}
@@ -79,10 +81,19 @@ public class HQMain {
 		
 		Thread.sleep(5000);
 		
-		//console按编号输出
+		//console按编号输出执行时间
+		System.out.println("请求运行时长：");
 		for(int i=0;i<costTimes.size();i++) {			
-			System.out.println(i + ": " + costTimes.get(i));
+			System.out.println(costTimes.get(i));
 		}
+		//平均执行时间
+		long total = 0;
+		for(int i=0;i<costTimes.size();i++) {	
+			total += costTimes.get(i);
+		}
+		System.out.println("平均执行时间：" + total/costTimes.size());
+
+		
 		//绘制图表
     	LineChart example = new LineChart(costTimes);
 	    SwingUtilities.invokeLater(() -> {    
@@ -92,8 +103,6 @@ public class HQMain {
 			example.setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);  
 			example.setVisible(true);  
 	    });  
-
-
 	    
 	}
 	

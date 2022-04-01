@@ -20,7 +20,7 @@ public class HQMain {
 	
 	static Logger logger = LoggerFactory.getLogger(HQMain.class);
 	
-	public static final int SIZE =100;	
+	public static final int SIZE = 25;	//CPU在30左右超载
 	public static final int CREDIT_LEVEL = 60;	//总分：100
 	public static final int MIN_CONSENSUS_NUM = 4;  //最小共识节点数
 	public static final int MAX_CONSENSUS_NUM = 20;  //最大共识节点数
@@ -79,7 +79,7 @@ public class HQMain {
 		
 		
 		
-		Thread.sleep(5000);
+		Thread.sleep(3000);
 		
 		//console按编号输出执行时间
 		System.out.println("请求运行时长：");
@@ -92,6 +92,8 @@ public class HQMain {
 			total += costTimes.get(i);
 		}
 		System.out.println("平均执行时间：" + total/costTimes.size());
+		//节点信息
+		System.out.println("共识节点数：" + consensusNodes.size());
 
 		
 		//绘制图表
@@ -110,8 +112,8 @@ public class HQMain {
 	//取满足可信度水平且不超过最大共识节点数的所有节点
 	public static void classifyNodes(int creditLevel, int maxQuantity) {
 //		Collections.reverse(nodes);   //集合降序排列----暂时不用
+		int num = 0;
 		for(int i=0;i<SIZE;i++) {
-			int num = 0;
 			if(nodes.get(i).getCredit() > creditLevel && num < maxQuantity) {
 				consensusNodes.add(nodes.get(i));
 				num++;

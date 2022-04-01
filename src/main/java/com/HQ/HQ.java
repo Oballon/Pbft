@@ -29,17 +29,19 @@ public class HQ implements Comparable<HQ>{
 	
 	public static final int CV = -2; // 视图变更
 	public static final int VIEW = -1; // 请求视图
-	public static final int REQ = 0; // 请求数据
-	public static final int PP = 1; // 预准备阶段
-	public static final int PA = 2; // 准备阶段
-	public static final int CM = 3; // 提交阶段
-	public static final int REPLY = 4; // 回复
 	
-	public static final int HREQ = 5; //请求数据
-	public static final int HPP = 6;  // 预准备阶段
-	public static final int HBA = 7;  // 回复阶段
-	public static final int HCON = 8; // 确认阶段
-	public static final int HCOM = 9; // 回复		
+	public static final int HREQ = 0; //请求数据
+	public static final int HPP = 1;  // 预准备阶段
+	public static final int HBA = 2;  // 回复阶段
+	public static final int HCON = 3; // 确认阶段
+	public static final int HCOM = 4; // 回复		
+	
+	public static final int REQ = 5; // 请求数据
+	public static final int PP = 6; // 预准备阶段
+	public static final int PA = 7; // 准备阶段
+	public static final int CM = 8; // 提交阶段
+	public static final int REPLY = 9; // 回复
+
 	
 	public int size; // 总节点数
 	public static int HQSize; //共识节点数
@@ -50,7 +52,6 @@ public class HQ implements Comparable<HQ>{
 	private volatile boolean viewOk = false; // 视图状态	
 	private volatile boolean isRun = false;	
 	
-	private volatile int num = 0;	
 	private volatile boolean isByzt;
 	private volatile boolean isHQ;
 	private volatile int credit;
@@ -286,7 +287,7 @@ public class HQ implements Comparable<HQ>{
 		votes_pare.add(key);		
 		// 票数 +1
 		long agCou = aggre_pare.incrementAndGet(msg.getDataKey());
-			if(agCou == HQSize){
+			if(agCou == 2*maxf+1){
 				aggre_pare.remove(msg.getDataKey());
 				// 进入提交阶段
 				HQMsg sed = new HQMsg(msg);
@@ -295,7 +296,7 @@ public class HQ implements Comparable<HQ>{
 				doneReq.put(sed.getDataKey(), sed);
 				HQMain.HQpublish(sed);				
 			}
-			//待完善，主节点未得到所有投票情况，用超时机制处理
+			//已完善，主节点未得到所有投票情况，用超时机制处理
 		
 	}
 		
@@ -462,32 +463,26 @@ public class HQ implements Comparable<HQ>{
 	}	
 
 	/**
-	 * 检测HQPbft超时情况
+	 * 检测超时情况
 	 */
 	private void checkHTimer() {
-		List<String> remo = Lists.newArrayList();
-	
-		for(Entry<String, Long> item : timeOutsReq.entrySet()){
-			if(System.currentTimeMillis() - item.getValue() > 1000){
-				// 请求超时
-				logger.info("超时");
-				remo.add(item.getKey());
+		//定时检查当前请求执行时长，超时更改共识方法，重新发送请求 
+		//假定超时10000ms后，投票均已完成，未完成请求已失去完成可能
+		if (curReq !=null && (System.currentTimeMillis() - curReq.getTime() >10000)) {
+			curReq.setVnum(this.view);
+			replyCount.set(0);
+			if(curReq.getType() == HREQ) {
+				curReq.setType(REQ);
+				doSendCurReq();
+			}else {
+				curReq.setType(HREQ);
+				doSendCurReq();
 			}
 		}
-		remo.forEach((data)->{
-			timeOutsReq.remove(data);
-//			HQMain.Bstart();
-//			HQMsg sed = new HQMsg(msg);
-//			sed.setType(REQ);
-//			push(sed);
-		});		
-	}
-	
-	/**
-	 * 检测Pbft超时情况
-	 */
-	private void checkTimer() {
+		
 		List<String> remo = Lists.newArrayList();
+		
+		//检查消息超时
 		for(Entry<String, Long> item : timeOuts.entrySet()){
 			if(System.currentTimeMillis() - item.getValue() > 1000){
 				// 超时还没达成一致，则本次投票无效
@@ -500,6 +495,8 @@ public class HQ implements Comparable<HQ>{
 		});
 		
 		remo.clear();
+		
+		//检查请求超时
 		for(Entry<String, Long> item : timeOutsReq.entrySet()){
 			if(System.currentTimeMillis() - item.getValue() > 600){
 				// 请求超时
@@ -522,9 +519,8 @@ public class HQ implements Comparable<HQ>{
 				cv.setVnum(this.view+1);
 				HQMain.publish(cv);
 			}			
-		});		
+		});			
 	}
-	
 	
 	public int getPriNode(int view){
 		return view%size;

@@ -21,8 +21,8 @@ public class PbftMain {
 
 	static Logger logger = LoggerFactory.getLogger(PbftMain.class);
 	
-	public static final int SIZE = 4;	
-	public static final int LIMITE_SIZE = 100;
+	public static final int SIZE = 10;	
+	public static final int LIMITE_SIZE = 25; //CPU在30左右超载
 	public static final int REQUEST_NUM = 10;
 
 	
@@ -121,12 +121,5 @@ public class PbftMain {
 		costTimes.add(costTime);
 	}	
 
-    public static List<Long> costTest(){
-		List<Long> cost = new ArrayList<>();
-	    for(int i=0;i<20;i++) {
-	    	cost.add(RandomUtils.nextLong(10, 60));
-	    }
-	    return cost;
-    }
 	
 }

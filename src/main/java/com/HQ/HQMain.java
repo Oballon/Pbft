@@ -102,9 +102,10 @@ public class HQMain {
 		
 		//console按编号输出执行时间
 		System.out.println("请求运行时长：");
-		for(int i=0;i<costTimes.size();i++) {			
-			System.out.println(i + ":" + costTimes.get(i));
-		}
+		System.out.println(costTimes);
+//		for(int i=0;i<costTimes.size();i++) {			
+//			System.out.println(i + ":" + costTimes.get(i));
+//		}
 		//平均执行时间
 		long timesTotal = 0;
 		for(int i=0;i<costTimes.size();i++) {	

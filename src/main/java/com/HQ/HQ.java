@@ -634,7 +634,13 @@ public class HQ implements Comparable<HQ>{
 	}
 	
 	public void increCredit() {
-		this.credit += 10; 
+		this.credit += 10;
+		if (this.credit > 100)this.credit =100;
+	}
+	
+	public void decreCredit() {
+		this.credit -= 10;
+		if (this.credit < 0)this.credit =0;
 	}
 
 	public boolean isHQ() {

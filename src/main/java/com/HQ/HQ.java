@@ -287,8 +287,11 @@ public class HQ implements Comparable<HQ>{
 		votes_pare.add(key);		
 		// 票数 +1
 		long agCou = aggre_pare.incrementAndGet(msg.getDataKey());
-			if(agCou == 2*maxf+1){
+			if(agCou == HQSize){
 				aggre_pare.remove(msg.getDataKey());
+				for(int i=0;i<HQMain.consensusNodes.size();i++) {
+					HQMain.consensusNodes.get(i).increCredit();
+				}
 				// 进入提交阶段
 				HQMsg sed = new HQMsg(msg);
 				sed.setType(HCON);
@@ -420,10 +423,7 @@ public class HQ implements Comparable<HQ>{
 		// 票数 +1
 		long agCou = aggre_comm.incrementAndGet(msg.getDataKey());
 		if(agCou >= 2*maxf+1){
-			if(credit<100) {
-				credit = credit +10;
-				if(credit>100) credit =100;
-			}			
+	
 			remove(msg.getDataKey());
 			if(msg.getNode() != index){
 				this.genNo.set(msg.getNo());
@@ -631,6 +631,10 @@ public class HQ implements Comparable<HQ>{
 	
 	public int getCredit() {
 		return this.credit;
+	}
+	
+	public void increCredit() {
+		this.credit += 10; 
 	}
 
 	public boolean isHQ() {

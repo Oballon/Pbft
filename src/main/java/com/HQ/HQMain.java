@@ -34,8 +34,8 @@ public class HQMain {
 	
 	private static List<HQ> nodes = Lists.newArrayList();
 	
-	private static List<HQ> consensusNodes = Lists.newArrayList(); 
-	private static List<HQ> candidateNodes = Lists.newArrayList(); 
+	public static List<HQ> consensusNodes = Lists.newArrayList(); 
+	public static List<HQ> candidateNodes = Lists.newArrayList(); 
 	
 	private static Random r = new Random();	
 	

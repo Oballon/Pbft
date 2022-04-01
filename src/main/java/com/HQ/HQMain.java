@@ -4,6 +4,8 @@ import java.util.List;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Random;
+import java.util.Timer;
+import java.util.TimerTask;
 
 import javax.swing.SwingUtilities;
 import javax.swing.WindowConstants;
@@ -24,7 +26,11 @@ public class HQMain {
 	public static final int CREDIT_LEVEL = 60;	//总分：100
 	public static final int MIN_CONSENSUS_NUM = 4;  //最小共识节点数
 	public static final int MAX_CONSENSUS_NUM = 20;  //最大共识节点数
-	public static final int REQUEST_NUM = 10;
+	public static final int REQUEST_NUM = 300; //大于500便开始陷入
+	public static long num = REQUEST_NUM;
+
+	private static long lastTPS;
+	private static List<Long> TPSList = new ArrayList<>();
 	
 	private static List<HQ> nodes = Lists.newArrayList();
 	
@@ -75,36 +81,102 @@ public class HQMain {
 		for(int i=0;i<REQUEST_NUM;i++){
 			int node = r.nextInt(SIZE);
 			nodes.get(node).req("test"+i);
-		}
+		}			
+
+		
+		//定时计算网络吞吐量
+		Timer TPSTimer = new Timer("TPS");
+		TPSTimer.schedule(new TimerTask() {
+			@Override
+			public void run() {
+				if(costTimes.size() >0 && costTimes.size() < REQUEST_NUM) {
+					lastTPS = costTimes.size() - lastTPS;
+					TPSList.add(lastTPS);
+				}
+			}
+		}, 0, 1000);   
 		
 		
-		
-		Thread.sleep(3000);
+		Thread.sleep(REQUEST_NUM*100);
+
 		
 		//console按编号输出执行时间
 		System.out.println("请求运行时长：");
 		for(int i=0;i<costTimes.size();i++) {			
-			System.out.println(costTimes.get(i));
+			System.out.println(i + ":" + costTimes.get(i));
 		}
 		//平均执行时间
-		long total = 0;
+		long timesTotal = 0;
 		for(int i=0;i<costTimes.size();i++) {	
-			total += costTimes.get(i);
+			timesTotal += costTimes.get(i);
 		}
-		System.out.println("平均执行时间：" + total/costTimes.size());
+		System.out.println("平均执行时间：" + timesTotal/costTimes.size());
 		//节点信息
-		System.out.println("共识节点数：" + consensusNodes.size());
-
-		
-		//绘制图表
-    	LineChart example = new LineChart(costTimes);
+		System.out.println("共识节点数：" + SIZE);
+		//执行时间图表
+    	LineChart costTimesChart = new LineChart(costTimes,"Request","Delay/ms","Exectimes");
 	    SwingUtilities.invokeLater(() -> {    
-			example.setAlwaysOnTop(false);  
-			example.pack();  
-			example.setSize(600, 400);  
-			example.setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);  
-			example.setVisible(true);  
+			costTimesChart.setAlwaysOnTop(false);  
+			costTimesChart.pack();  
+			costTimesChart.setSize(600, 400);  
+			costTimesChart.setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);  
+			costTimesChart.setVisible(true);  
 	    });  
+	    //吞吐量图表
+	  	LineChart TPSChart = new LineChart(TPSList,"time/s","TPS","TPS");
+	    SwingUtilities.invokeLater(() -> {    
+	    	TPSChart.setAlwaysOnTop(false);  
+	    	TPSChart.pack();  
+	    	TPSChart.setSize(600, 400);  
+	    	TPSChart.setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);  
+	    	TPSChart.setVisible(true);  
+	    });  
+
+		//定时判断请求是否已全部完成，如是，则输出测试数据
+//		Timer outputTimer = new Timer("Output");
+//		outputTimer.schedule(new TimerTask() {
+//			@Override
+//			public void run() {
+//				if(costTimes.size() == num) {
+//				    num++;
+//					//console按编号输出执行时间
+//					System.out.println("测试");
+//					
+//					//console按编号输出执行时间
+//					System.out.println("请求运行时长：");
+//					for(int i=0;i<costTimes.size();i++) {			
+//						System.out.println(i + ":" + costTimes.get(i));
+//					}
+//					//平均执行时间
+//					long timesTotal = 0;
+//					for(int i=0;i<costTimes.size();i++) {	
+//						timesTotal += costTimes.get(i);
+//					}
+//					System.out.println("平均执行时间：" + timesTotal/costTimes.size());
+//					//节点信息
+//					System.out.println("共识节点数：" + SIZE);
+//					//执行时间图表
+//			    	LineChart costTimesChart = new LineChart(costTimes,"Request","Delay/ms","Exectimes");
+//				    SwingUtilities.invokeLater(() -> {    
+//						costTimesChart.setAlwaysOnTop(false);  
+//						costTimesChart.pack();  
+//						costTimesChart.setSize(600, 400);  
+//						costTimesChart.setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);  
+//						costTimesChart.setVisible(true);  
+//				    });  
+//				    //吞吐量图表
+//				  	LineChart TPSChart = new LineChart(TPSList,"time/s","TPS","TPS");
+//				    SwingUtilities.invokeLater(() -> {    
+//				    	TPSChart.setAlwaysOnTop(false);  
+//				    	TPSChart.pack();  
+//				    	TPSChart.setSize(600, 400);  
+//				    	TPSChart.setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);  
+//				    	TPSChart.setVisible(true);  
+//				    });  
+//
+//				}
+//			}
+//		}, REQUEST_NUM*150, 2000); 
 	    
 	}
 	

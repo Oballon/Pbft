@@ -17,19 +17,19 @@ public class LineChart extends JFrame {
   
 	private DefaultCategoryDataset dataset;
   
-	public LineChart(List<Long> costTimes) {  
+	public LineChart(List<Long> costTimes,String X,String Y,String title) {  
 		super("Line Chart");
 		createDataset(costTimes);
-		createChart();
+		createChart(X,Y,title);
   }    
   
   
-  private void createChart() {
+  private void createChart(String X,String Y,String title) {
 	    // Create chart  
 	    JFreeChart chart = ChartFactory.createLineChart(  
-	        "Network Delay", // Chart title  
-	        "Requests", // X-Axis Label  
-	        "Delay/ms", // Y-Axis Label  
+	        title, // Chart title  
+	        X, // X-Axis Label  
+	        Y, // Y-Axis Label  
 	        dataset  
 	        );  
 	  

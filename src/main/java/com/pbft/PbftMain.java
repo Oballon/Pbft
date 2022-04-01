@@ -9,6 +9,8 @@ import org.slf4j.LoggerFactory;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
+import java.util.Timer;
+import java.util.TimerTask;
 
 import javax.swing.SwingUtilities;
 import javax.swing.WindowConstants;
@@ -21,9 +23,14 @@ public class PbftMain {
 
 	static Logger logger = LoggerFactory.getLogger(PbftMain.class);
 	
-	public static final int SIZE = 10;	
+	public static final int SIZE = 20;
+	public static final double BYZ_RATIO =0;  
 	public static final int LIMITE_SIZE = 25; //CPU在30左右超载
-	public static final int REQUEST_NUM = 10;
+	public static final int REQUEST_NUM = 400; //大于500便开始丢消息
+	public static long num = REQUEST_NUM;
+
+	private static long lastTPS;
+	private static List<Long> TPSList = new ArrayList<>();
 
 	
 	private static long[][] delayNet = new long[LIMITE_SIZE][LIMITE_SIZE];	
@@ -36,7 +43,7 @@ public class PbftMain {
 	
 	
 	public static void main(String[] args) throws InterruptedException {
-		
+				
 		//初始化网络延迟
 		for(int i=0;i<SIZE;i++){
 			for(int j=0;j<SIZE;j++){
@@ -51,7 +58,7 @@ public class PbftMain {
 		
 		//多线程启动网络节点
 		for(int i=0;i<SIZE;i++){
-			nodes.add(new Pbft(i,SIZE).start());
+			nodes.add(new Pbft(i,SIZE,BYZ_RATIO).start());
 		}
 		
 		//全网节点随机产生请求
@@ -60,31 +67,65 @@ public class PbftMain {
 			nodes.get(node).req("test"+i);
 		}
 
-		Thread.sleep(3000);
+		//定时计算网络吞吐量
+		Timer TPSTimer = new Timer("TPS");
+		TPSTimer.schedule(new TimerTask() {
+			@Override
+			public void run() {
+				if(costTimes.size() >0 && costTimes.size() < REQUEST_NUM) {
+					lastTPS = costTimes.size() - lastTPS;
+					TPSList.add(lastTPS);
+				}
+			}
+		}, 0, 1000);   
 		
-		
-		//console按编号输出执行时间
-		System.out.println("请求运行时长：");
-		for(int i=0;i<costTimes.size();i++) {			
-			System.out.println(costTimes.get(i));
-		}
-		//平均执行时间
-		long total = 0;
-		for(int i=0;i<costTimes.size();i++) {	
-			total += costTimes.get(i);
-		}
-		System.out.println("平均执行时间：" + total/costTimes.size());
-		
-		//绘制图表
-    	LineChart example = new LineChart(costTimes);
-	    SwingUtilities.invokeLater(() -> {    
-			example.setAlwaysOnTop(false);  
-			example.pack();  
-			example.setSize(600, 400);  
-			example.setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);  
-			example.setVisible(true);  
-	    });  
+		//定时判断请求是否已全部完成，如是，则输出测试数据
+		Timer outputTimer = new Timer("Output");
+		outputTimer.schedule(new TimerTask() {
+			@Override
+			public void run() {
+				if(costTimes.size() == num) {
+				    num++;
+					//console按编号输出执行时间
+					System.out.println("测试");
+					
+					//console按编号输出执行时间
+					System.out.println("请求运行时长：");
+					for(int i=0;i<costTimes.size();i++) {			
+						System.out.println(i + ":" + costTimes.get(i));
+					}
+					//平均执行时间
+					long timesTotal = 0;
+					for(int i=0;i<costTimes.size();i++) {	
+						timesTotal += costTimes.get(i);
+					}
+					System.out.println("平均执行时间：" + timesTotal/costTimes.size());
+					//节点信息
+					System.out.println("共识节点数：" + SIZE);
+					//执行时间图表
+			    	LineChart costTimesChart = new LineChart(costTimes,"Request","Delay/ms","Exectimes");
+				    SwingUtilities.invokeLater(() -> {    
+						costTimesChart.setAlwaysOnTop(false);  
+						costTimesChart.pack();  
+						costTimesChart.setSize(600, 400);  
+						costTimesChart.setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);  
+						costTimesChart.setVisible(true);  
+				    });  
+				    //吞吐量图表
+				  	LineChart TPSChart = new LineChart(TPSList,"time/s","TPS","TPS");
+				    SwingUtilities.invokeLater(() -> {    
+				    	TPSChart.setAlwaysOnTop(false);  
+				    	TPSChart.pack();  
+				    	TPSChart.setSize(600, 400);  
+				    	TPSChart.setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);  
+				    	TPSChart.setVisible(true);  
+				    });  
 
+				}
+			}
+		}, REQUEST_NUM*15, 2000); 
+
+		
 	    
 	
 	}

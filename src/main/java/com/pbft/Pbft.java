@@ -5,6 +5,8 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Queues;
 import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.AtomicLongMap;
+
+import org.apache.commons.lang3.RandomUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -31,10 +33,12 @@ public class Pbft {
 	public int size; // 总节点数
 	public int maxf; // 最大失效节点	
 	private int index; // 节点标识
+	private int isByz; //拜占庭节点标志
 	
 	private int view; // 视图view
 	private volatile boolean viewOk = false; // 视图状态
 	private volatile boolean isRun = false;
+	
 
 	// 消息队列
 	private BlockingQueue<PbftMsg> qbm = Queues.newLinkedBlockingQueue();
@@ -73,10 +77,11 @@ public class Pbft {
 	
 	private Timer timer;
 	
-	public Pbft(int node,int size) {
+	public Pbft(int node,int size,double ratio) {
 		this.index = node;
 		this.size = size;
 		this.maxf = (size-1)/3;
+		this.isByz = RandomUtils.nextInt(0, (int)(ratio ==0 ? 0:(1/ratio)));
 		timer = new Timer("timer"+node);
 	}
 	
@@ -215,7 +220,9 @@ public class Pbft {
 	}	
 
 	private void onPrePrepare(PbftMsg msg) {
-		if(!checkMsg(msg,true)) return;
+		if(!checkMsg(msg,true)) {
+			return;
+		}
 		
 		String key = msg.getDataKey();
 		if(votes_pre.contains(key))	return;
@@ -235,7 +242,6 @@ public class Pbft {
 
 	private void onPrepare(PbftMsg msg) {
 		if(!checkMsg(msg,false)) {
-			//logger.info("异常消息[" +index+"]:"+msg);
 			return;
 		}
 		

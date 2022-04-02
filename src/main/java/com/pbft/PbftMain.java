@@ -26,7 +26,7 @@ public class PbftMain {
 	public static final int SIZE = 20;
 	public static final double BYZ_RATIO =0;  
 	public static final int LIMITE_SIZE = 25; //CPU在30左右超载
-	public static final int REQUEST_NUM = 300; //大于500便开始丢消息
+	public static final int REQUEST_NUM = 300; //大于300便开始遗失请求
 	public static long num = REQUEST_NUM;
 
 	private static long lastTPS;
@@ -87,11 +87,7 @@ public class PbftMain {
 				if(costTimes.size() == num) {
 				    num++;
 					//console按编号输出执行时间
-//					System.out.println("测试");
-					
-					//console按编号输出执行时间
-					System.out.println("请求运行时长：");
-					System.out.println(costTimes);
+					System.out.println("请求运行时长：" + costTimes);
 //					for(int i=0;i<costTimes.size();i++) {			
 //						System.out.println(i + ":" + costTimes.get(i));
 //					}

@@ -360,13 +360,13 @@ public class Pbft {
 	 * 检测超时情况
 	 */
 	private void checkTimer() {
-//		//定时检查当前请求执行时长，超时重新发送请求 
-//		//假定超时10000ms后，投票均已完成，未完成请求已失去完成可能
-//		if (curReq !=null && (System.currentTimeMillis() - curReq.getTime() >10000)) {
-//			curReq.setVnum(this.view);
-//			replyCount.set(0);
-//			doSendCurReq();
-//		}		
+		//定时检查当前请求执行时长，超时重新发送请求 
+		//假定超时10000ms后，投票均已完成，未完成请求已失去完成可能
+		if (curReq !=null && (System.currentTimeMillis() - curReq.getTime() >10000)) {
+			curReq.setVnum(this.view);
+			replyCount.set(0);
+			doSendCurReq();
+		}		
 			
 		List<String> remo = Lists.newArrayList();
 		for(Entry<String, Long> item : timeOuts.entrySet()){

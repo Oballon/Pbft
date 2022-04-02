@@ -38,7 +38,7 @@ public class LineChart extends JFrame {
   }
   
   private void createDataset(List<Long> costTimes) {
-	  String series1 = "Cost Times";
+	  String series1 = "Line Chart";
 	  
 	  dataset = new DefaultCategoryDataset(); 
 	  
